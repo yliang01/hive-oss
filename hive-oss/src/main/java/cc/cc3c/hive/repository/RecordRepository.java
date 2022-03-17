@@ -151,4 +151,8 @@ public class RecordRepository {
             log.error("remove failed", e);
         }
     }
+
+    public synchronized Record get(Integer id) {
+        return recordMap.get(id);
+    }
 }

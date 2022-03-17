@@ -5,12 +5,10 @@ import cc.cc3c.hive.oss.client.tencent.TencentOssConfig;
 import cc.cc3c.hive.oss.encryption.HiveOssEncryption;
 import cc.cc3c.hive.oss.encryption.HiveOssEncryptionConfig;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.io.File;
 
 @Data
-@NoArgsConstructor
 public class HiveOssTask {
     public static HiveOssEncryptionConfig encryptionConfig;
     public static AlibabaOssConfig alibabaOssConfig;
@@ -21,7 +19,10 @@ public class HiveOssTask {
     private String key;
     private File file;
 
-    public HiveOssTask(HiveOssTask hiveOssTask) {
+    protected HiveOssTask() {
+    }
+
+    protected HiveOssTask(HiveOssTask hiveOssTask) {
         this.encryption = hiveOssTask.encryption;
         this.bucket = hiveOssTask.bucket;
         this.key = hiveOssTask.key;

@@ -1,1 +1,10 @@
-spring.config.import: classpath:./application.secret.yml
+spring.config.import: classpath:external-secret.yml
+spring.profiles.active: prod
+
+hive:
+  sync:
+    uploadDir: /Users/yliang/Downloads/hive/upload/
+    downloadDir: /Users/yliang/Downloads/hive/download/
+  repository:
+    indexFile: /Users/yliang/Downloads/hive/repository/index.dat
+    aofFile: /Users/yliang/Downloads/hive/repository/aof.dat
