@@ -1,9 +1,9 @@
 package cc.cc3c.hive.oss.vendor;
 
+import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
-import cc.cc3c.hive.oss.vendor.encryption.HiveOssEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
 public class HiveOssConfiguration implements InitializingBean {
 
     @Autowired
-    private HiveOssEncryptionConfig encryptionConfig;
+    private HiveEncryptionConfig encryptionConfig;
 
     @Autowired
     private AlibabaOssConfig alibabaOssConfig;

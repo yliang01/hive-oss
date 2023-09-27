@@ -1,20 +1,20 @@
 package cc.cc3c.hive.oss.vendor.vo;
 
+import cc.cc3c.hive.encryption.HiveEncryption;
+import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
-import cc.cc3c.hive.oss.vendor.encryption.HiveOssEncryption;
-import cc.cc3c.hive.oss.vendor.encryption.HiveOssEncryptionConfig;
 import lombok.Data;
 
 import java.io.File;
 
 @Data
 public class HiveOssTask {
-    public static HiveOssEncryptionConfig encryptionConfig;
+    public static HiveEncryptionConfig encryptionConfig;
     public static AlibabaOssConfig alibabaOssConfig;
     public static TencentOssConfig tencentOssConfig;
 
-    private HiveOssEncryption encryption;
+    private HiveEncryption encryption;
     private String bucket;
     private String key;
     private File file;
@@ -61,7 +61,7 @@ public class HiveOssTask {
     }
 
     public HiveOssTask withEncryption(String fileName) throws Exception {
-        setEncryption(new HiveOssEncryption(encryptionConfig, fileName));
+        setEncryption(new HiveEncryption(encryptionConfig, fileName));
         return this;
     }
 

@@ -45,7 +45,7 @@ public class HiveDownloader {
 
     @EventListener(classes = ApplicationReadyEvent.class)
     public void syncRecord() {
-        download("");
+        download("3102d482db4964693b2fd167d7cf3434");
     }
 
     public void download(String fileKey) {
