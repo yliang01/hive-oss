@@ -1,12 +1,11 @@
 package cc.cc3c.hive.oss.sync;
 
+import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.vendor.HiveOssService;
-import cc.cc3c.hive.oss.record.repository.HiveRecord;
-import cc.cc3c.hive.oss.record.repository.HiveRecordDbRepository;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
-import cc.cc3c.hive.oss.record.HiveRecordSource;
-import cc.cc3c.hive.oss.record.HiveRecordStatus;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -24,8 +23,6 @@ import java.io.IOException;
 @Slf4j
 @Component
 public class HiveUploadListener implements FileAlterationListener {
-    @Autowired
-    private HiveRecordDbRepository hiveRecordDbRepository;
     @Value("${hive.sync.uploadDir}")
     private String uploadDir;
     @Autowired
@@ -55,19 +52,6 @@ public class HiveUploadListener implements FileAlterationListener {
 
     @Override
     public void onDirectoryCreate(File file) {
-//        try {
-//            File compressedFile = ZipUtils.compress(file);
-//            String fileName = file.getName();
-//            String key = DigestUtils.md5Hex(file.getName());
-//
-//            HiveOssUploadTask task = HiveOssTask.createTask().withAlibabaStandard().withEncryption(fileName).withKeyFile(key, compressedFile).toUploadTask();
-//            hiveOssService.alibabaOss().upload(task);
-//
-//            FileUtils.deleteQuietly(file);
-//            FileUtils.deleteQuietly(compressedFile);
-//        } catch (Exception e) {
-//            log.error("onDirectoryCreate", e);
-//        }
     }
 
     @Override
@@ -82,42 +66,42 @@ public class HiveUploadListener implements FileAlterationListener {
 
     @Override
     public void onFileCreate(File file) {
-        try {
-            String fileName = file.getName();
-            String fileKey = DigestUtils.md5Hex(file.getName());
-            HiveOssUploadTask task;
-            HiveRecordSource source;
-            if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_STANDARD.name())) {
-                task = HiveOssTask.createTask().withAlibabaStandard()
-                        .withEncryption(fileName).withKeyFile(fileKey, file)
-                        .toUploadTask();
-                source = HiveRecordSource.ALIBABA_STANDARD;
-            } else if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_ACHIEVE.name())) {
-                task = HiveOssTask.createTask().withAlibabaAchieve()
-                        .withEncryption(fileName).withKeyFile(fileKey, file)
-                        .toUploadTask();
-                source = HiveRecordSource.ALIBABA_ACHIEVE;
-            } else {
-                log.error("unknown storage type");
-                return;
-            }
-
-            HiveRecord hiveRecord = new HiveRecord();
-            hiveRecord.setFileName(fileName);
-            hiveRecord.setFileKey(fileKey);
-            hiveRecord.setZipped(false);
-            hiveRecord.setSource(source);
-            hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
-            hiveRecordDbRepository.save(hiveRecord);
-
-            hiveOssService.alibabaOss().upload(task);
-
-            hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
-            hiveRecordDbRepository.save(hiveRecord);
-            FileUtils.deleteQuietly(file);
-        } catch (Exception e) {
-            log.error("onFileCreate", e);
-        }
+//        try {
+//            String fileName = file.getName();
+//            String fileKey = DigestUtils.md5Hex(file.getName());
+//            HiveOssUploadTask task;
+//            HiveRecordSource source;
+//            if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_STANDARD.name())) {
+//                task = HiveOssTask.createTask().withAlibabaStandard()
+//                        .withEncryption(fileName).withKeyFile(fileKey, file)
+//                        .toUploadTask();
+//                source = HiveRecordSource.ALIBABA_STANDARD;
+//            } else if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_ACHIEVE.name())) {
+//                task = HiveOssTask.createTask().withAlibabaAchieve()
+//                        .withEncryption(fileName).withKeyFile(fileKey, file)
+//                        .toUploadTask();
+//                source = HiveRecordSource.ALIBABA_ACHIEVE;
+//            } else {
+//                log.error("unknown storage type");
+//                return;
+//            }
+//
+//            HiveRecord hiveRecord = new HiveRecord();
+//            hiveRecord.setFileName(fileName);
+//            hiveRecord.setFileKey(fileKey);
+//            hiveRecord.setZipped(false);
+//            hiveRecord.setSource(source);
+//            hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
+//            hiveRecordDbRepository.save(hiveRecord);
+//
+//            hiveOssService.alibabaOss().upload(task);
+//
+//            hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
+//            hiveRecordDbRepository.save(hiveRecord);
+//            FileUtils.deleteQuietly(file);
+//        } catch (Exception e) {
+//            log.error("onFileCreate", e);
+//        }
     }
 
     @Override

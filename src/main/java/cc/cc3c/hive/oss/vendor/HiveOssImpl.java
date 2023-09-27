@@ -226,7 +226,6 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
                 log.info("download successfully");
                 return task;
             })
-            .retry(3)
             .doOnError(throwable -> log.error("download failed", throwable))
             .doFinally(signalType -> {
                 lock.lock();

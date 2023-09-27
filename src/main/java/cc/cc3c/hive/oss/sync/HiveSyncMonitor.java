@@ -12,12 +12,8 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class HiveSyncMonitor {
-    @Value("${hive.sync.downloadDir}")
-    private String downloadDir;
     @Autowired
     private HiveUploadListener hiveUploadListener;
-    @Autowired
-    private HiveDownloadListener hiveDownloadListener;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReadyEvent() {
@@ -36,17 +32,6 @@ public class HiveSyncMonitor {
             uploadMonitor.start();
         } catch (Exception e) {
             log.error("failed to start upload monitor", e);
-        }
-        try {
-            FileAlterationMonitor downloadMonitor = new FileAlterationMonitor();
-            FileAlterationObserver downloadObserver = new FileAlterationObserver(hiveDownloadListener.getDownloadFolder(), (file) -> {
-                return file.isFile() && file.getName().endsWith(".hive");
-            });
-            downloadObserver.addListener(hiveDownloadListener);
-            downloadMonitor.addObserver(downloadObserver);
-            downloadMonitor.start();
-        } catch (Exception e) {
-            log.error("failed to start download monitor", e);
         }
     }
 }

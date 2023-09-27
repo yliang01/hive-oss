@@ -1,17 +1,14 @@
 package cc.cc3c.hive.oss.sync;
 
+import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.vendor.HiveOssService;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
-import cc.cc3c.hive.oss.record.repository.HiveRecord;
-import cc.cc3c.hive.oss.record.repository.HiveRecordDbRepository;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-//import cc.cc3c.hive.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.record.HiveRecordSource;
-import cc.cc3c.hive.oss.record.HiveRecordStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -23,14 +20,14 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class HiveSyncCronJob {
+public class HiveRecordSyncJob {
     @Autowired
-    private HiveRecordDbRepository hiveRecordDbRepository;
+    private HiveRecordRepository hiveRecordRepository;
     @Autowired
     private HiveOssService hiveOssService;
 
     //    @Scheduled(cron = "0 0 0 1/1 * ?")
-    @EventListener(classes = ApplicationReadyEvent.class)
+//    @EventListener(classes = ApplicationReadyEvent.class)
     public void syncRecord() {
 
         syncFromAlibaba(HiveRecordSource.ALIBABA_ACHIEVE, HiveOssTask.createTask().withAlibabaAchieve());
@@ -63,7 +60,7 @@ public class HiveSyncCronJob {
             for (Map.Entry<String, HiveOssObject> entry : keyToObjectMap.entrySet()) {
                 String fileKey = entry.getKey();
                 HiveOssObject hiveOssObject = entry.getValue();
-                Optional<HiveRecord> hiveRecordOptional = hiveRecordDbRepository.findByFileKey(fileKey);
+                Optional<HiveRecord> hiveRecordOptional = hiveRecordRepository.findByFileKey(fileKey);
                 HiveRecord hiveRecord;
                 if (hiveRecordOptional.isPresent()) {
                     hiveRecord = hiveRecordOptional.get();
@@ -94,7 +91,7 @@ public class HiveSyncCronJob {
                 } else {
                     hiveRecord.setDeletable(true);
                 }
-                hiveRecordDbRepository.saveAndFlush(hiveRecord);
+                hiveRecordRepository.saveAndFlush(hiveRecord);
             }
             log.info("{} actual size: {}", source, keyToObjectMap.size());
             log.info("{} uploaded size: {}", source, uploadedSize);
