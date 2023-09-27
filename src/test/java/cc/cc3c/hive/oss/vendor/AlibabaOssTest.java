@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.testng.AbstractTestNGSpringContextTests;
+import org.springframework.test.context.testng.AbstractTransactionalTestNGSpringContextTests;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -18,7 +19,7 @@ import java.io.File;
 @Slf4j
 @SpringBootTest
 @ActiveProfiles({"oss", "test"})
-public class AlibabaOssTest extends AbstractTestNGSpringContextTests {
+public class AlibabaOssTest extends AbstractTransactionalTestNGSpringContextTests {
 
     @Autowired
     HiveOssService hiveOssService;
