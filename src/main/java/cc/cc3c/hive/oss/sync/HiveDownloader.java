@@ -53,7 +53,7 @@ public class HiveDownloader {
             Optional<HiveRecord> hiveRecordOptional = hiveRecordRepository.findByFileKey(fileKey);
             if (hiveRecordOptional.isPresent()) {
                 HiveRecord hiveRecord = hiveRecordOptional.get();
-                File downloadFile = new File(downloadDir, hiveRecord.getZipped() ? hiveRecord.getFileKey() + ".zip" : hiveRecord.getFileKey());
+                File downloadFile = new File(downloadFolder, hiveRecord.getZipped() ? hiveRecord.getFileKey() + ".zip" : hiveRecord.getFileKey());
                 HiveRecordSource source = hiveRecord.getSource();
                 if (HiveRecordSource.ALIBABA_ACHIEVE.equals(source)) {
                     HiveOssDownloadTask task = HiveOssTask.createTask().withAlibabaAchieve()
