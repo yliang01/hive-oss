@@ -1,5 +1,5 @@
 spring.config.import: classpath:external-secret.yml
-spring.profiles.active: prod,db
+spring.profiles.active: test,db
 
 hive:
   sync:

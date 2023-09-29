@@ -6,7 +6,6 @@ import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.vendor.HiveOssService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssDownloadTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +44,7 @@ public class HiveDownloader {
 
     @EventListener(classes = ApplicationReadyEvent.class)
     public void syncRecord() {
-        download("3102d482db4964693b2fd167d7cf3434");
+        download("");
     }
 
     public void download(String fileKey) {
