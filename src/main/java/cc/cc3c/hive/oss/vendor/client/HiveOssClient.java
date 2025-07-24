@@ -23,6 +23,8 @@ public interface HiveOssClient {
 
     boolean isRestored(HiveOssTask task);
 
+    boolean doesObjectExist(HiveOssTask task);
+
     HiveOssObject getObject(HiveOssTask task);
 
     List<HiveOssObject> listObject(HiveOssTask task);

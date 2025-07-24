@@ -1,14 +1,10 @@
 package cc.cc3c.hive.oss.sync;
 
-import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.HiveRecordSource;
-import cc.cc3c.hive.domain.model.HiveRecordStatus;
-import cc.cc3c.hive.oss.vendor.HiveOssService;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
+import cc.cc3c.hive.oss.service.HiveOssService;
+import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.monitor.FileAlterationListener;
 import org.apache.commons.io.monitor.FileAlterationObserver;
@@ -16,21 +12,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.IOException;
 
 @Slf4j
 @Component
-public class HiveUploadListener implements FileAlterationListener {
-    @Value("${hive.sync.uploadDir}")
-    private String uploadDir;
+public class HiveUploader implements FileAlterationListener {
+
     @Autowired
     private HiveOssService hiveOssService;
     @Getter
     private File alibabaStandardFolder;
     @Getter
     private File alibabaAchieveFolder;
+
+    private String uploadDir;
+
+    @Value("${hive.sync.uploadDir}")
+    public void setUploadDir(String uploadDir) {
+        this.uploadDir = uploadDir;
+    }
 
     @PostConstruct
     public void init() {

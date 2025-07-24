@@ -99,6 +99,11 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
+    public boolean doesObjectExist(HiveOssTask task) {
+        return false;
+    }
+
+    @Override
     public HiveOssObject getObject(HiveOssTask task) {
         COSObject cosObject = ossClient.getObject(task.getBucket(), task.getKey());
         HiveOssObject hiveOssObject = new HiveOssObject();

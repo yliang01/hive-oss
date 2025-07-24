@@ -3,18 +3,16 @@ package cc.cc3c.hive.oss.sync;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.HiveRecordSource;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.vendor.HiveOssService;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssDownloadTask;
+import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.IOException;
 import java.util.Optional;
@@ -22,14 +20,24 @@ import java.util.Optional;
 @Slf4j
 @Component
 public class HiveDownloader {
-    @Autowired
-    HiveRecordRepository hiveRecordRepository;
-    @Autowired
-    HiveOssService hiveOssService;
+
+    private final HiveOssService hiveOssService;
+
+    private final HiveRecordRepository hiveRecordRepository;
+
+    public HiveDownloader(HiveRecordRepository hiveRecordRepository, HiveOssService hiveOssService) {
+        this.hiveRecordRepository = hiveRecordRepository;
+        this.hiveOssService = hiveOssService;
+    }
+
+    private String downloadDir;
+
+    private File downloadFolder;
 
     @Value("${hive.sync.downloadDir}")
-    private String downloadDir;
-    private File downloadFolder;
+    public void setDownloadDir(String downloadDir) {
+        this.downloadDir = downloadDir;
+    }
 
     @PostConstruct
     public void init() {
@@ -55,16 +63,14 @@ public class HiveDownloader {
                 File downloadFile = new File(downloadFolder, hiveRecord.getZipped() ? hiveRecord.getFileKey() + ".zip" : hiveRecord.getFileKey());
                 HiveRecordSource source = hiveRecord.getSource();
                 if (HiveRecordSource.ALIBABA_ACHIEVE.equals(source)) {
-                    HiveOssDownloadTask task = HiveOssTask.createTask().withAlibabaAchieve()
-                            .withEncryption(hiveRecord.getFileName()).withKeyFile(hiveRecord.getFileKey(), downloadFile)
-                            .toDownloadTask();
-                    hiveOssService.alibabaOss().restore(task);
-                    hiveOssService.alibabaOss().download(task);
+                    HiveOssTask task = HiveOssTask.createTask().withBucket(source)
+                            .withEncryption(hiveRecord.getFileName()).withKeyFile(hiveRecord.getFileKey(), downloadFile);
+                    hiveOssService.using(source).restore(task);
+                    hiveOssService.using(source).download(task);
                 } else if (HiveRecordSource.ALIBABA_STANDARD.equals(source)) {
-                    HiveOssDownloadTask task = HiveOssTask.createTask().withAlibabaStandard()
-                            .withEncryption(hiveRecord.getFileName()).withKeyFile(hiveRecord.getFileKey(), downloadFile)
-                            .toDownloadTask();
-                    hiveOssService.alibabaOss().download(task);
+                    HiveOssTask task = HiveOssTask.createTask().withBucket(source)
+                            .withEncryption(hiveRecord.getFileName()).withKeyFile(hiveRecord.getFileKey(), downloadFile) ;
+                    hiveOssService.using(source).download(task);
                 } else {
                     log.error("unknown source {} for fileKey {}", source, fileKey);
                 }

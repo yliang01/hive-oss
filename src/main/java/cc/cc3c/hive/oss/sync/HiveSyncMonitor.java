@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.monitor.FileAlterationMonitor;
 import org.apache.commons.io.monitor.FileAlterationObserver;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -13,20 +12,20 @@ import org.springframework.stereotype.Component;
 @Component
 public class HiveSyncMonitor {
     @Autowired
-    private HiveUploadListener hiveUploadListener;
+    private HiveUploader hiveUploader;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReadyEvent() {
         try {
             FileAlterationMonitor uploadMonitor = new FileAlterationMonitor();
-            FileAlterationObserver alibabaStandardObserver = new FileAlterationObserver(hiveUploadListener.getAlibabaStandardFolder(), (file) -> {
+            FileAlterationObserver alibabaStandardObserver = new FileAlterationObserver(hiveUploader.getAlibabaStandardFolder(), (file) -> {
                 return !file.getName().endsWith(".hive");
             });
-            alibabaStandardObserver.addListener(hiveUploadListener);
-            FileAlterationObserver alibabaAchieveObserver = new FileAlterationObserver(hiveUploadListener.getAlibabaAchieveFolder(), (file) -> {
+            alibabaStandardObserver.addListener(hiveUploader);
+            FileAlterationObserver alibabaAchieveObserver = new FileAlterationObserver(hiveUploader.getAlibabaAchieveFolder(), (file) -> {
                 return !file.getName().endsWith(".hive");
             });
-            alibabaAchieveObserver.addListener(hiveUploadListener);
+            alibabaAchieveObserver.addListener(hiveUploader);
             uploadMonitor.addObserver(alibabaStandardObserver);
             uploadMonitor.addObserver(alibabaAchieveObserver);
             uploadMonitor.start();

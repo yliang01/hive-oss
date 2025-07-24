@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.vendor.vo;
 
+import cc.cc3c.hive.domain.model.HiveRecordSource;
 import cc.cc3c.hive.encryption.HiveEncryption;
 import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
@@ -37,21 +38,18 @@ public class HiveOssTask {
         return new HiveOssUploadTask(this);
     }
 
-    public HiveOssDownloadTask toDownloadTask() {
-        return new HiveOssDownloadTask(this);
-    }
-
     public boolean isEncrypted() {
         return encryption != null;
     }
 
-    public HiveOssTask withAlibabaStandard() {
-        setBucket(alibabaOssConfig.getStandardBucket());
-        return this;
-    }
-
-    public HiveOssTask withAlibabaAchieve() {
-        setBucket(alibabaOssConfig.getAchieveBucket());
+    public HiveOssTask withBucket(HiveRecordSource source) {
+        if (source == HiveRecordSource.ALIBABA_ACHIEVE) {
+            setBucket(alibabaOssConfig.getArchiveBucket());
+        } else if (source == HiveRecordSource.ALIBABA_STANDARD) {
+            setBucket(alibabaOssConfig.getStandardBucket());
+        } else {
+            throw new IllegalArgumentException("bad record source");
+        }
         return this;
     }
 
@@ -62,6 +60,11 @@ public class HiveOssTask {
 
     public HiveOssTask withEncryption(String fileName) throws Exception {
         setEncryption(new HiveEncryption(encryptionConfig, fileName));
+        return this;
+    }
+
+    public HiveOssTask withKey(String key) {
+        setKey(key);
         return this;
     }
 

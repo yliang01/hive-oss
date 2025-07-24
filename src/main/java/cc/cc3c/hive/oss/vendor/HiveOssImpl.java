@@ -3,7 +3,6 @@ package cc.cc3c.hive.oss.vendor;
 import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssDownloadTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
 import lombok.AllArgsConstructor;
@@ -64,6 +63,11 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         restoreScheduler = Schedulers.newParallel("restore", concurrency, false);
         downloadScheduler = Schedulers.newParallel("download", concurrency, false);
 
+    }
+
+    @Override
+    public boolean doesObjectExist(HiveOssTask task) {
+        return ossClient.doesObjectExist(task);
     }
 
     @Override
@@ -209,7 +213,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     }
 
     @Override
-    public void download(HiveOssDownloadTask task) throws Exception {
+    public void download(HiveOssTask task) throws Exception {
         Hooks.onErrorDropped(x -> {
         });
         ReentrantLock lock = new ReentrantLock();
@@ -257,7 +261,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         return inputStream;
     }
 
-    private OutputStream getOutputStream(HiveOssDownloadTask task) throws Exception {
+    private OutputStream getOutputStream(HiveOssTask task) throws Exception {
         OutputStream outputStream;
         if (task.isEncrypted()) {
             outputStream = new CipherOutputStream(new FileOutputStream(task.getFile()), task.getEncryption().getDecryptCipher());

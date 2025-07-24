@@ -5,11 +5,13 @@ import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+@Slf4j
 @Configuration
 public class HiveOssConfiguration implements InitializingBean {
 
@@ -40,6 +42,7 @@ public class HiveOssConfiguration implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
+        log.info("alibaba oss config: {}", alibabaOssConfig);
         HiveOssTask.encryptionConfig = encryptionConfig;
         HiveOssTask.alibabaOssConfig = alibabaOssConfig;
         HiveOssTask.tencentOssConfig = tencentOssConfig;
