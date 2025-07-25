@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.sync;
 
+import cc.cc3c.hive.oss.service.HiveUploadService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.monitor.FileAlterationMonitor;
 import org.apache.commons.io.monitor.FileAlterationObserver;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class HiveSyncMonitor {
     @Autowired
-    private HiveUploader hiveUploader;
+    private HiveUploadService hiveUploader;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReadyEvent() {

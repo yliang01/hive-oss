@@ -4,7 +4,8 @@ import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreStatus;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -29,6 +30,7 @@ import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -47,8 +49,6 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
 
     private Scheduler readerScheduler;
     private Scheduler uploadScheduler;
-    private Scheduler restoreScheduler;
-    private Scheduler downloadScheduler;
 
     @Autowired
     public HiveOssImpl(HiveOssClient ossClient) {
@@ -60,9 +60,6 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         partSizeInByte = partSize * 1024 * 1024;
         readerScheduler = Schedulers.newParallel("reader", concurrency, false);
         uploadScheduler = Schedulers.newParallel("upload", concurrency, false);
-        restoreScheduler = Schedulers.newParallel("restore", concurrency, false);
-        downloadScheduler = Schedulers.newParallel("download", concurrency, false);
-
     }
 
     @Override
@@ -76,14 +73,14 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     }
 
     @Override
-    public void upload(HiveOssUploadTask task) throws Exception {
+    public void upload(HiveOssTask task) throws Exception {
         Hooks.onErrorDropped(x -> {
         });
         preMultipartUpload(task);
         multiPartsUpload(task);
     }
 
-    private void preMultipartUpload(HiveOssUploadTask task) {
+    private void preMultipartUpload(HiveOssTask task) {
         String uploadId = ossClient.getExistingMultipartUploadId(task);
         if (uploadId != null) {
             task.setUploadId(uploadId);
@@ -94,7 +91,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         }
     }
 
-    private ParallelFlux<DataChunk> getUploadFlux(HiveOssUploadTask task, InputStream inputStream) {
+    private ParallelFlux<DataChunk> getUploadFlux(HiveOssTask task, InputStream inputStream) {
         return Flux.<DataChunk>generate(synchronousSink -> {
             try {
                 while (true) {
@@ -121,27 +118,27 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         }).subscribeOn(readerScheduler).parallel(concurrency, 1).runOn(uploadScheduler, 1);
     }
 
-    private void subscribeUploadFlux(ParallelFlux<DataChunk> uploadFlux, HiveOssUploadTask task, ReentrantLock lock, Condition condition) {
-        uploadFlux.doOnError(x -> log.error("parallel upload failed", x))
-        .map(this::partUpload)
-        .collectSortedList(Comparator.comparingInt(HiveOssPartUploadResult::getPart))
-        .doOnSuccess(x -> {
-            ossClient.listParts(task);
-            ossClient.completeMultipartUpload(task);
-        })
-        .doFinally(signalType -> {
-            try {
-                lock.lock();
-                log.info("upload completed");
-                condition.signal();
-            } finally {
-                lock.unlock();
-            }
-        })
-        .subscribe();
+    private void subscribeUploadFlux(ParallelFlux<DataChunk> uploadFlux, HiveOssTask task, ReentrantLock lock, Condition condition) {
+        uploadFlux.map(this::partUpload)
+                .collectSortedList(Comparator.comparingInt(HiveOssPartUploadResult::getPart))
+                .doOnSuccess(x -> {
+                    ossClient.listParts(task);
+                    ossClient.completeMultipartUpload(task);
+                })
+                .doOnError(x -> log.error("parallel upload failed", x))
+                .doFinally(signalType -> {
+                    try {
+                        lock.lock();
+                        log.info("upload completed");
+                        condition.signal();
+                    } finally {
+                        lock.unlock();
+                    }
+                })
+                .subscribe();
     }
 
-    private void multiPartsUpload(HiveOssUploadTask task) {
+    private void multiPartsUpload(HiveOssTask task) {
         ReentrantLock lock = new ReentrantLock();
         Condition condition = lock.newCondition();
         lock.lock();
@@ -170,79 +167,26 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        })
-        .retry()
-        .doOnNext(uploadResult::set)
-        .subscribe();
+        }).retry().doOnNext(uploadResult::set).subscribe();
         return uploadResult.get();
     }
 
     @Override
-    public void restore(HiveOssTask task) throws Exception {
-        ReentrantLock lock = new ReentrantLock();
-        Condition condition = lock.newCondition();
-        try {
-            lock.lock();
-            ossClient.restore(task);
-            Mono.fromCallable(() -> {
-                log.info("restore check");
-                if (ossClient.isRestored(task)) {
-                    log.info("restore successfully");
-                    return task;
-                } else {
-                    return null;
-                }
-            })
-            .subscribeOn(restoreScheduler)
-            .repeatWhenEmpty(Repeat.onlyIf(r -> true)
-                .backoff(Backoff.fixed(Duration.ofSeconds(10)))
-                .timeout(Duration.ofMinutes(30)))
-            .doOnError(throwable -> log.error("restore failed", throwable))
-            .doFinally(signalType -> {
-                lock.lock();
-                condition.signal();
-                lock.unlock();
-            })
-            .subscribe();
+    public HiveRestoreResult restoreCheck(HiveOssTask task) {
+        return ossClient.restoreCheck(task);
+    }
 
-            condition.await();
-            log.info("restored");
-        } finally {
-            lock.unlock();
-        }
+    @Override
+    public void restore(HiveOssTask task) {
+        log.info("start restore {}", task.getKey());
+        ossClient.restore(task);
     }
 
     @Override
     public void download(HiveOssTask task) throws Exception {
-        Hooks.onErrorDropped(x -> {
-        });
-        ReentrantLock lock = new ReentrantLock();
-        Condition condition = lock.newCondition();
-        try {
-            lock.lock();
-            Mono.fromCallable(() -> {
-                log.info("download start");
-                HiveOssObject ossObject = ossClient.getObject(task);
-                try (InputStream inputStream = ossObject.getObjectContent();
-                     OutputStream outputStream = getOutputStream(task)) {
-                    IOUtils.copyLarge(inputStream, outputStream);
-                }
-                log.info("download successfully");
-                return task;
-            })
-            .doOnError(throwable -> log.error("download failed", throwable))
-            .doFinally(signalType -> {
-                lock.lock();
-                condition.signal();
-                lock.unlock();
-            })
-            .subscribeOn(downloadScheduler)
-            .subscribe();
-
-            condition.await();
-            log.info("downloaded");
-        } finally {
-            lock.unlock();
+        HiveOssObject ossObject = ossClient.getObject(task);
+        try (InputStream inputStream = ossObject.getObjectContent(); OutputStream outputStream = getOutputStream(task)) {
+            IOUtils.copyLarge(inputStream, outputStream);
         }
     }
 
@@ -251,7 +195,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         ossClient.deleteObject(task);
     }
 
-    private InputStream getInputStream(HiveOssUploadTask task) throws Exception {
+    private InputStream getInputStream(HiveOssTask task) throws Exception {
         InputStream inputStream;
         if (task.isEncrypted()) {
             inputStream = new CipherInputStream(new FileInputStream(task.getFile()), task.getEncryption().getEncryptCipher());
@@ -273,7 +217,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
 
     @AllArgsConstructor
     private static class DataChunk {
-        private final HiveOssUploadTask task;
+        private final HiveOssTask task;
         private final byte[] buffer;
         private final int read;
         private final int part;

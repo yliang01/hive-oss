@@ -1,22 +1,29 @@
 package cc.cc3c.hive.oss.vendor.client.alibaba;
 
+import cc.cc3c.hive.oss.vendor.DownloadProgressListener;
 import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreStatus;
 import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClient;
+import com.aliyun.oss.internal.OSSHeaders;
 import com.aliyun.oss.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Component
@@ -31,12 +38,12 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     @Override
-    public String initiateMultipartUpload(HiveOssUploadTask task) {
+    public String initiateMultipartUpload(HiveOssTask task) {
         return ossClient.initiateMultipartUpload(new InitiateMultipartUploadRequest(task.getBucket(), task.getKey())).getUploadId();
     }
 
     @Override
-    public String getExistingMultipartUploadId(HiveOssUploadTask task) {
+    public String getExistingMultipartUploadId(HiveOssTask task) {
         ListMultipartUploadsRequest listMultipartUploadsRequest = new ListMultipartUploadsRequest(task.getBucket());
         List<MultipartUpload> multipartUploadList = ossClient.listMultipartUploads(listMultipartUploadsRequest).getMultipartUploads();
         for (MultipartUpload multipartUpload : multipartUploadList) {
@@ -48,7 +55,7 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     @Override
-    public void listParts(HiveOssUploadTask task) {
+    public void listParts(HiveOssTask task) {
         ListPartsRequest listPartsRequest = new ListPartsRequest(task.getBucket(), task.getKey(), task.getUploadId());
         List<PartSummary> partSummaryList = ossClient.listParts(listPartsRequest).getParts();
 
@@ -57,7 +64,7 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     @Override
-    public HiveOssPartUploadResult uploadPart(HiveOssUploadTask task, byte[] buffer, int read, int part) {
+    public HiveOssPartUploadResult uploadPart(HiveOssTask task, byte[] buffer, int read, int part) {
         UploadPartRequest uploadPartRequest = new UploadPartRequest();
         uploadPartRequest.setBucketName(task.getBucket());
         uploadPartRequest.setKey(task.getKey());
@@ -71,7 +78,7 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     @Override
-    public void completeMultipartUpload(HiveOssUploadTask task) {
+    public void completeMultipartUpload(HiveOssTask task) {
         List<PartETag> partETagList = new ArrayList<>();
         for (Map.Entry<Integer, String> entry : task.getUploadedMap().entrySet()) {
             partETagList.add(new PartETag(entry.getKey(), entry.getValue()));
@@ -86,8 +93,28 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     @Override
-    public boolean isRestored(HiveOssTask task) {
-        return ossClient.getObjectMetadata(task.getBucket(), task.getKey()).isRestoreCompleted();
+    public HiveRestoreResult restoreCheck(HiveOssTask task) {
+        ObjectMetadata objectMetadata = ossClient.getObjectMetadata(task.getBucket(), task.getKey());
+        String restoreString = objectMetadata.getObjectRawRestore();
+        if (restoreString == null) {
+            return HiveRestoreResult.builder().restoreStatus(HiveRestoreStatus.NOT_STARTED).build();
+        }
+        if (restoreString.equals(OSSHeaders.OSS_ONGOING_RESTORE)) {
+            return HiveRestoreResult.builder().restoreStatus(HiveRestoreStatus.IN_PROGRESS).build();
+        }
+        Pattern pattern = Pattern.compile("expiry-date=\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(restoreString);
+        if (matcher.find()) {
+            String expiryDateStr = matcher.group(1);
+            DateTimeFormatter formatter = DateTimeFormatter.RFC_1123_DATE_TIME;
+            ZonedDateTime expiryDate = ZonedDateTime.parse(expiryDateStr, formatter);
+            return HiveRestoreResult.builder()
+                    .restoreStatus(HiveRestoreStatus.COMPLETED)
+                    .expiryDate(expiryDate)
+                    .build();
+        } else {
+            throw new IllegalArgumentException("bad restore time");
+        }
     }
 
     @Override
@@ -97,7 +124,9 @@ public class AlibabaOssClient implements HiveOssClient {
 
     @Override
     public HiveOssObject getObject(HiveOssTask task) {
-        OSSObject ossObject = ossClient.getObject(task.getBucket(), task.getKey());
+        GetObjectRequest getObjectRequest = new GetObjectRequest(task.getBucket(), task.getKey());
+        getObjectRequest.setProgressListener(new DownloadProgressListener(task));
+        OSSObject ossObject = ossClient.getObject(getObjectRequest);
         HiveOssObject hiveOssObject = new HiveOssObject();
         hiveOssObject.setFileKey(ossObject.getKey());
         hiveOssObject.setSize(ossObject.getObjectMetadata().getContentLength());

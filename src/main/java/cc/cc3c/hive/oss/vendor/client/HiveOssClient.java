@@ -3,25 +3,25 @@ package cc.cc3c.hive.oss.vendor.client;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 
 import java.util.List;
 
 public interface HiveOssClient {
 
-    String initiateMultipartUpload(HiveOssUploadTask task);
+    String initiateMultipartUpload(HiveOssTask task);
 
-    String getExistingMultipartUploadId(HiveOssUploadTask task);
+    String getExistingMultipartUploadId(HiveOssTask task);
 
-    void listParts(HiveOssUploadTask task);
+    void listParts(HiveOssTask task);
 
-    HiveOssPartUploadResult uploadPart(HiveOssUploadTask task, byte[] buffer, int read, int part);
+    HiveOssPartUploadResult uploadPart(HiveOssTask task, byte[] buffer, int read, int part);
 
-    void completeMultipartUpload(HiveOssUploadTask task);
+    void completeMultipartUpload(HiveOssTask task);
 
     void restore(HiveOssTask task);
 
-    boolean isRestored(HiveOssTask task);
+    HiveRestoreResult restoreCheck(HiveOssTask task);
 
     boolean doesObjectExist(HiveOssTask task);
 

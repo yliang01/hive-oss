@@ -6,36 +6,36 @@ import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
 import lombok.Data;
+import lombok.ToString;
 
 import java.io.File;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Data
+@ToString
 public class HiveOssTask {
     public static HiveEncryptionConfig encryptionConfig;
     public static AlibabaOssConfig alibabaOssConfig;
     public static TencentOssConfig tencentOssConfig;
 
     private HiveEncryption encryption;
+    @ToString.Include
     private String bucket;
+    @ToString.Include
     private String key;
+
     private File file;
 
-    protected HiveOssTask() {
-    }
+    private String uploadId;
+    private AtomicInteger currentPart = new AtomicInteger(0);
+    private Map<Integer, String> uploadedMap = new ConcurrentHashMap<>();
 
-    protected HiveOssTask(HiveOssTask hiveOssTask) {
-        this.encryption = hiveOssTask.encryption;
-        this.bucket = hiveOssTask.bucket;
-        this.key = hiveOssTask.key;
-        this.file = hiveOssTask.file;
-    }
+    private int progress;
 
     public static HiveOssTask createTask() {
         return new HiveOssTask();
-    }
-
-    public HiveOssUploadTask toUploadTask() {
-        return new HiveOssUploadTask(this);
     }
 
     public boolean isEncrypted() {
@@ -68,8 +68,7 @@ public class HiveOssTask {
         return this;
     }
 
-    public HiveOssTask withKeyFile(String key, File file) {
-        setKey(key);
+    public HiveOssTask withFile(File file) {
         setFile(file);
         return this;
     }

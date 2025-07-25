@@ -5,7 +5,7 @@ import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssUploadTask;
+import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
@@ -39,12 +39,12 @@ public class TencentOssClient implements HiveOssClient {
 
 
     @Override
-    public String initiateMultipartUpload(HiveOssUploadTask task) {
+    public String initiateMultipartUpload(HiveOssTask task) {
         return ossClient.initiateMultipartUpload(new InitiateMultipartUploadRequest(task.getBucket(), task.getKey())).getUploadId();
     }
 
     @Override
-    public String getExistingMultipartUploadId(HiveOssUploadTask task) {
+    public String getExistingMultipartUploadId(HiveOssTask task) {
         ListMultipartUploadsRequest listMultipartUploadsRequest = new ListMultipartUploadsRequest(task.getBucket());
         List<MultipartUpload> multipartUploadList = ossClient.listMultipartUploads(listMultipartUploadsRequest).getMultipartUploads();
         for (MultipartUpload multipartUpload : multipartUploadList) {
@@ -56,7 +56,7 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
-    public void listParts(HiveOssUploadTask task) {
+    public void listParts(HiveOssTask task) {
         ListPartsRequest listPartsRequest = new ListPartsRequest(task.getBucket(), task.getKey(), task.getUploadId());
         List<PartSummary> partSummaryList = ossClient.listParts(listPartsRequest).getParts();
 
@@ -65,7 +65,7 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
-    public HiveOssPartUploadResult uploadPart(HiveOssUploadTask task, byte[] buffer, int read, int part) {
+    public HiveOssPartUploadResult uploadPart(HiveOssTask task, byte[] buffer, int read, int part) {
         UploadPartRequest uploadPartRequest = new UploadPartRequest();
         uploadPartRequest.setBucketName(task.getBucket());
         uploadPartRequest.setKey(task.getKey());
@@ -79,7 +79,7 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
-    public void completeMultipartUpload(HiveOssUploadTask task) {
+    public void completeMultipartUpload(HiveOssTask task) {
         List<PartETag> partETagList = new ArrayList<>();
         for (Map.Entry<Integer, String> entry : task.getUploadedMap().entrySet()) {
             partETagList.add(new PartETag(entry.getKey(), entry.getValue()));
@@ -94,7 +94,7 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
-    public boolean isRestored(HiveOssTask task) {
+    public HiveRestoreResult restoreCheck(HiveOssTask task) {
         throw new UnsupportedOperationException();
     }
 

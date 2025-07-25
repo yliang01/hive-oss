@@ -1,7 +1,6 @@
 spring.config.import: classpath:external-secret.yml
-spring.profiles.active: test
+spring.profiles.active: prod
 
 hive:
-  sync:
-    uploadDir: C:\Users\YLiang\Downloads\hive\upload\
-    downloadDir: C:\Users\YLiang\Downloads\hive\download\
+  uploadDir: C:\Users\YLiang\Downloads\hive\upload\
+  downloadDir: C:\Users\YLiang\Downloads\hive\download\
