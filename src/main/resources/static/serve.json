@@ -1,0 +1,7 @@
+{
+  "cleanUrls": false,
+  "rewrites": [],
+  "redirects": [
+    { "source": "/", "destination": "/pages/bucket.html" }
+  ]
+} 

@@ -1,0 +1,54 @@
+.filename-cell,
+.filekey-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filekey-cell {
+  max-width: 200px;
+  font-family: monospace;
+}
+
+/* 当鼠标悬停时显示完整内容的提示 */
+.filename-cell:hover,
+.filekey-cell:hover {
+  position: relative;
+  overflow: visible;
+  z-index: 1;
+}
+
+/* 确保表格单元格内容不会换行 */
+.table td {
+  white-space: nowrap;
+}
+
+/* 让表格容器可以水平滚动 */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 同步按钮样式 */
+.sync-icon {
+  display: inline-block;
+  font-size: 1.2em;
+  margin-right: 4px;
+}
+
+/* 同步按钮旋转动画 */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sync-icon.spinning {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+/* 禁用状态下的按钮样式 */
+.btn:disabled .sync-icon {
+  opacity: 0.5;
+} 
