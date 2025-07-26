@@ -1,4 +1,4 @@
-import { formatSize, formatDate, showError } from './utils.js';
+import { formatSize, formatDate, showError, showSuccess } from './utils.js';
 
 const API_BASE = 'http://localhost:8080';
 const pageSize = 50;
@@ -15,6 +15,61 @@ function getCurrentBucket() {
 // 返回 bucket 列表页
 function backToBuckets() {
   window.location.href = window.location.origin + '/pages/bucket.html';
+}
+
+// 新增：刷新单个文件信息
+function refreshSingleFile(fileKey) {
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    showError('未指定 bucket');
+    return;
+  }
+  
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`)
+    .then(res => {
+      if (!res.ok) throw new Error('获取文件信息失败');
+      return res.json();
+    })
+    .then(fileData => {
+      updateFileRow(fileKey, fileData);
+    })
+    .catch(e => showError(e.message));
+}
+
+// 新增：更新文件行内容
+function updateFileRow(fileKey, fileData) {
+  const row = document.querySelector(`tr[data-filekey="${fileKey}"]`);
+  if (row) {
+    row.innerHTML = generateFileRowHTML(fileData);
+  }
+}
+
+// 新增：生成文件行HTML
+function generateFileRowHTML(file) {
+  return `
+    <td class="filename-cell" title="${file.fileName}">${file.fileName}</td>
+    <td class="filekey-cell" title="${file.fileKey}">${file.fileKey}</td>
+    <td>${file.zipped ? '是' : '否'}</td>
+    <td>${formatSize(file.size)}</td>
+    <td>${file.status}</td>
+    <td>${formatDate(file.updateTime)}</td>
+    <td>${file.unfreezeTime ? formatDate(file.unfreezeTime) : '-'}</td>
+    <td>
+      <div class="d-flex flex-row align-items-center mb-1 gap-2">
+        <button class='btn btn-sm btn-warning' onclick="unfreezeFile('${file.fileKey}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
+        <button class="btn btn-sm btn-primary download-btn" data-filekey="${file.fileKey}" onclick="downloadFile('${file.fileKey}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteFile('${file.fileKey}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
+      </div>
+      <div class="d-flex flex-row align-items-center gap-2">
+        ${file.localPath ? `<button class='btn btn-outline-secondary btn-sm' onclick='copyLocalPath("${file.localPath}")' title='复制本地路径'>复制路径</button>` : ''}
+        ${file.localPath ? `<button class='btn btn-outline-danger btn-sm' onclick='releaseLocalFile("${file.fileKey}", "${file.localPath}")' title='释放本地文件'>释放本地</button>` : ''}
+        ${file.localPath ? `<span class="ms-1" title="${file.localPathExists === undefined ? '未知' : (file.localPathExists ? '本地文件存在' : '本地文件不存在')}">
+          ${file.localPathExists === undefined ? '' : (file.localPathExists ? '<span style=\'color:green;font-size:1.2em;\'>&#10003;</span>' : `<span style=\'color:red;font-size:1.2em;cursor:pointer;\' onclick=\'handleLocalPathMissingDownload("${file.fileKey}")\'>&#10007;</span>`)}
+        </span>` : ''}
+        <span class="download-progress text-info small" id="download-progress-${file.fileKey}"></span>
+      </div>
+    </td>
+  `;
 }
 
 // 渲染文件列表
@@ -37,30 +92,8 @@ function renderFiles(files) {
 
   files.forEach(file => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="filename-cell" title="${file.fileName}">${file.fileName}</td>
-      <td class="filekey-cell" title="${file.fileKey}">${file.fileKey}</td>
-      <td>${file.zipped ? '是' : '否'}</td>
-      <td>${formatSize(file.size)}</td>
-      <td>${file.status}</td>
-      <td>${formatDate(file.updateTime)}</td>
-      <td>${file.unfreezeTime ? formatDate(file.unfreezeTime) : '-'}</td>
-      <td>
-        <div class="d-flex flex-row align-items-center mb-1 gap-2">
-          <button class='btn btn-sm btn-warning' onclick="unfreezeFile('${file.fileKey}')" ${!file.restorable ? 'disabled' : ''} title="${file.restorable ? '解冻文件' : '该文件不可解冻'}">解冻</button>
-          <button class="btn btn-sm btn-primary download-btn" data-filekey="${file.fileKey}" onclick="downloadFile('${file.fileKey}')" ${file.downloadable === false ? 'disabled title=\'该文件不可下载\'' : ''}>下载</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteFile('${file.fileKey}')" ${!file.deletable ? 'disabled' : ''} title="${file.deletable ? '删除文件' : '该文件不可删除'}">删除</button>
-        </div>
-        <div class="d-flex flex-row align-items-center gap-2">
-          ${file.localPath ? `<button class='btn btn-outline-secondary btn-sm' onclick='copyLocalPath("${file.localPath}")' title='复制本地路径'>复制路径</button>` : ''}
-          ${file.localPath ? `<button class='btn btn-outline-danger btn-sm' onclick='releaseLocalFile("${file.fileKey}", "${file.localPath}")' title='释放本地文件'>释放本地</button>` : ''}
-          ${file.localPath ? `<span class="ms-1" title="${file.localPathExists === undefined ? '未知' : (file.localPathExists ? '本地文件存在' : '本地文件不存在')}">
-            ${file.localPathExists === undefined ? '' : (file.localPathExists ? '<span style=\'color:green;font-size:1.2em;\'>&#10003;</span>' : `<span style=\'color:red;font-size:1.2em;cursor:pointer;\' onclick=\'handleLocalPathMissingDownload("${file.fileKey}")\'>&#10007;</span>`)}
-          </span>` : ''}
-          <span class="download-progress text-info small" id="download-progress-${file.fileKey}"></span>
-        </div>
-      </td>
-    `;
+    tr.setAttribute('data-filekey', file.fileKey); // 新增：为每行添加fileKey属性
+    tr.innerHTML = generateFileRowHTML(file);
     tbody.appendChild(tr);
   });
 }
@@ -203,13 +236,18 @@ function downloadFile(fileKey) {
     showError('未指定文件key');
     return;
   }
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    showError('未指定 bucket');
+    return;
+  }
   // 优化按钮选择器，避免依赖onclick字符串
   const btn = document.querySelector(`.download-btn[data-filekey="${fileKey}"]`);
   if (btn) {
     btn.disabled = true;
     btn.textContent = '下载准备中...';
   }
-  fetch(`${API_BASE}/files/download-task/${fileKey}`, { method: 'POST' })
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/download-task/${fileKey}`, { method: 'POST' })
     .then(res => {
       if (!res.ok) throw new Error('无法触发下载任务');
       showDownloadProgress('下载准备中...', fileKey);
@@ -235,7 +273,17 @@ function pollDownloadStatus(fileKey, btn, tryCount = 0) {
     showError('下载超时，请重试');
     return;
   }
-  fetch(`${API_BASE}/files/download-task-status/${fileKey}`)
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '下载';
+    }
+    showDownloadProgress('', fileKey);
+    showError('未指定 bucket');
+    return;
+  }
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/download-task-status/${fileKey}`)
     .then(res => {
       if (!res.ok) throw new Error('无法获取下载进度');
       return res.json();
@@ -300,48 +348,22 @@ function showDownloadProgress(msg, fileKey) {
 // 删除文件
 function deleteFile(fileKey) {
   if (!confirm('确定要删除该文件吗？')) return;
-  
-  fetch(`${API_BASE}/files/${fileKey}`, {
-    method: 'DELETE'
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('删除文件失败');
-      listFiles();
-    })
-    .catch(e => showError(e.message));
-}
-
-// 同步文件
-function syncFiles() {
-  const syncBtn = document.getElementById('sync-btn');
-  const syncIcon = syncBtn.querySelector('.sync-icon');
-  
-  // 获取当前bucket
   const currentBucket = getCurrentBucket();
   if (!currentBucket) {
     showError('未指定 bucket');
     return;
   }
-  
-  // 禁用按钮并开始旋转动画
-  syncBtn.disabled = true;
-  syncIcon.classList.add('spinning');
-  
-  fetch(`${API_BASE}/files/sync/${currentBucket}`, {
-    method: 'POST'
-  })
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`, { method: 'DELETE' })
     .then(res => {
-      if (!res.ok) throw new Error('同步失败');
-      showSuccess('同步成功');
-      listFiles(); // 刷新文件列表
+      if (!res.ok) throw new Error('删除文件失败');
+      showSuccess('删除操作已提交');
+      // 删除后刷新该文件的状态
+      refreshSingleFile(fileKey);
     })
-    .catch(e => showError(e.message))
-    .finally(() => {
-      // 恢复按钮状态
-      syncBtn.disabled = false;
-      syncIcon.classList.remove('spinning');
-    });
+    .catch(e => showError(e.message));
 }
+
+
 
 // 本地同步（改为确认删除）
 function confirmDeleteFiles() {
@@ -418,7 +440,15 @@ function unfreezeFile(fileKey) {
   const originalText = btn.textContent;
   btn.textContent = '解冻中...';
 
-  fetch(`${API_BASE}/files/unfreeze/${fileKey}`, { method: 'POST' })
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    showError('未指定 bucket');
+    return;
+  }
+
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze/${fileKey}`, { method: 'POST' })
     .then(res => {
       if (!res.ok) throw new Error('解冻请求失败');
       // 开始轮询解冻状态
@@ -439,7 +469,14 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
     showError('解冻超时，请稍后重试');
     return;
   }
-  fetch(`${API_BASE}/files/unfreeze-status/${fileKey}`)
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    showError('未指定 bucket');
+    return;
+  }
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze-status/${fileKey}`)
     .then(res => {
       if (!res.ok) throw new Error('查询解冻状态失败');
       return res.json();
@@ -450,8 +487,8 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
         btn.classList.remove('btn-warning');
         btn.classList.add('btn-success');
         setTimeout(() => {
-          // 刷新文件列表，恢复按钮
-          listFiles();
+          // 刷新单个文件信息
+          refreshSingleFile(fileKey);
         }, 1000);
       } else {
         setTimeout(() => pollUnfreezeStatus(fileKey, btn, originalText, tryCount + 1), 3000);
@@ -462,11 +499,7 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
     });
 }
 
-// 显示成功提示
-function showSuccess(message) {
-  // 如果utils.js中已经有类似函数，可以移除这个函数并使用utils中的
-  alert(message);
-}
+
 
 // 复制本地路径到剪贴板
 function copyLocalPath(path) {
@@ -513,11 +546,17 @@ function handleLocalPathMissingDownload(fileKey) {
 // 新增：释放本地文件
 function releaseLocalFile(fileKey, localPath) {
   if (!confirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。')) return;
-  fetch(`${API_BASE}/files/release-local/${fileKey}`, { method: 'POST' })
+  const currentBucket = getCurrentBucket();
+  if (!currentBucket) {
+    showError('未指定 bucket');
+    return;
+  }
+  fetch(`${API_BASE}/buckets/${currentBucket}/files/release-local/${fileKey}`, { method: 'POST' })
     .then(res => {
       if (!res.ok) throw new Error('释放本地文件失败');
       showSuccess('本地文件已释放');
-      listFiles();
+      // 刷新单个文件信息
+      refreshSingleFile(fileKey);
     })
     .catch(e => showError(e.message));
 }
@@ -526,12 +565,14 @@ window.backToBuckets = backToBuckets;
 window.downloadFile = downloadFile;
 window.deleteFile = deleteFile;
 window.changePage = changePage;
-window.syncFiles = syncFiles;
 window.confirmDeleteFiles = confirmDeleteFiles;
 window.syncRemoteFiles = syncRemoteFiles;
 window.unfreezeFile = unfreezeFile;
 window.copyLocalPath = copyLocalPath;
 window.handleLocalPathMissingDownload = handleLocalPathMissingDownload;
 window.releaseLocalFile = releaseLocalFile;
+window.refreshSingleFile = refreshSingleFile; // 新增：暴露刷新函数
+window.updateFileRow = updateFileRow; // 新增：暴露更新函数
+window.generateFileRowHTML = generateFileRowHTML; // 新增：暴露生成HTML函数
 
 window.onload = listFiles; 

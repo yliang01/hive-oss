@@ -1,7 +1,7 @@
 package cc.cc3c.hive.oss.vendor.client;
 
-import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
+import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 

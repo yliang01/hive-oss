@@ -2,8 +2,8 @@ package cc.cc3c.hive.oss.vendor.client.tencent;
 
 
 import cc.cc3c.hive.oss.vendor.client.HiveOssClient;
-import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
+import cc.cc3c.hive.oss.vendor.client.vo.HiveOssPartUploadResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 import com.qcloud.cos.COSClient;
@@ -113,6 +113,7 @@ public class TencentOssClient implements HiveOssClient {
         hiveOssObject.setObjectContent(cosObject.getObjectContent());
         return hiveOssObject;
     }
+
     @Override
     public List<HiveOssObject> listObject(HiveOssTask task) {
         List<HiveOssObject> objectSummaryList = new ArrayList<>();

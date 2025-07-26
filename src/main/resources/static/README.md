@@ -38,4 +38,16 @@ npx serve . --config serve.json
 
 - 原生 JavaScript (ES Modules)
 - Bootstrap 5.3.2
-- RESTful API 
+- RESTful API
+
+## 性能优化
+
+### 单个文件刷新
+
+- 删除、解冻、释放本地文件等操作后，只刷新单个文件信息而不是整个页面
+- 提升用户体验，特别是在文件数量较多的情况下
+- 减少不必要的网络请求和页面渲染
+
+### 接口文档
+
+详细的API接口文档请参考 [API.md](./API.md) 

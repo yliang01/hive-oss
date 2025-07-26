@@ -24,4 +24,9 @@ export function formatDate(isoString) {
 // 错误提示
 export function showError(message) {
   alert(message);
+}
+
+// 成功提示
+export function showSuccess(message) {
+  alert(message);
 } 

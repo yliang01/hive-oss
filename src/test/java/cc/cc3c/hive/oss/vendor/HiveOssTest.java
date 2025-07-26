@@ -21,35 +21,35 @@
 //
 //    @Autowired
 //    HiveOssService hiveOssService;
-////
-////    @Test
-////    public void tencentOss() throws Exception {
-////
-////        File original = FileUtils.getFile("test.pdf");
-////        File downloaded = FileUtils.getFile("test.t.pdf");
-////
-////        HiveOssUploadTask uploadTask = HiveOssTask.withUploadTask().withTencent().withKeyFile("test.pdf", original).toUploadTask();
-////        hiveOssService.tencentOss().upload(uploadTask);
-////
-////        HiveOssTask downloadTask = HiveOssTask.withTask().withTencent().withKeyFile("test.pdf", downloaded);
-//////        hiveOssService.tencentOss().downloadRaw(downloadTask);
-////
-////        String originalSha256 = DigestUtils.sha256Hex(FileUtils.openInputStream(original));
-////        String downloadedSha256 = DigestUtils.sha256Hex(FileUtils.openInputStream(downloaded));
-////
-////        Assert.assertEquals(originalSha256, downloadedSha256);
-////
-////        hiveOssService.tencentOss().delete(downloadTask);
-////    }
-////
-////    @Test
-////    public void tencentOssList() throws Exception {
-////        HiveOssTask task = HiveOssTask.withTask().withTencent();
-////        List<HiveOssObject> hiveOssObjectSummaries = hiveOssService.tencentOss().listObjects(task);
-////        for (HiveOssObject summary: hiveOssObjectSummaries){
-////            log.info("{}",summary);
-////        }
-////    }
+/// /
+/// /    @Test
+/// /    public void tencentOss() throws Exception {
+/// /
+/// /        File original = FileUtils.getFile("test.pdf");
+/// /        File downloaded = FileUtils.getFile("test.t.pdf");
+/// /
+/// /        HiveOssUploadTask uploadTask = HiveOssTask.withUploadTask().withTencent().withKeyFile("test.pdf", original).toUploadTask();
+/// /        hiveOssService.tencentOss().upload(uploadTask);
+/// /
+/// /        HiveOssTask downloadTask = HiveOssTask.withTask().withTencent().withKeyFile("test.pdf", downloaded);
+/// ///        hiveOssService.tencentOss().downloadRaw(downloadTask);
+/// /
+/// /        String originalSha256 = DigestUtils.sha256Hex(FileUtils.openInputStream(original));
+/// /        String downloadedSha256 = DigestUtils.sha256Hex(FileUtils.openInputStream(downloaded));
+/// /
+/// /        Assert.assertEquals(originalSha256, downloadedSha256);
+/// /
+/// /        hiveOssService.tencentOss().delete(downloadTask);
+/// /    }
+/// /
+/// /    @Test
+/// /    public void tencentOssList() throws Exception {
+/// /        HiveOssTask task = HiveOssTask.withTask().withTencent();
+/// /        List<HiveOssObject> hiveOssObjectSummaries = hiveOssService.tencentOss().listObjects(task);
+/// /        for (HiveOssObject summary: hiveOssObjectSummaries){
+/// /            log.info("{}",summary);
+/// /        }
+/// /    }
 //
 //    @Test
 //    public void alibabaStandardOss() throws Exception {

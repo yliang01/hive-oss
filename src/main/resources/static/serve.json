@@ -2,6 +2,9 @@
   "cleanUrls": false,
   "rewrites": [],
   "redirects": [
-    { "source": "/", "destination": "/pages/bucket.html" }
+    {
+      "source": "/",
+      "destination": "/pages/bucket.html"
+    }
   ]
 } 

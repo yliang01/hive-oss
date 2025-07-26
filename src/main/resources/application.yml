@@ -1,5 +1,5 @@
 spring.config.import: classpath:external-secret.yml
-spring.profiles.active: prod
+spring.profiles.active: test
 
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\

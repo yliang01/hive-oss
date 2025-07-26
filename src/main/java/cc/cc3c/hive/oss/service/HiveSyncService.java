@@ -8,8 +8,6 @@ import cc.cc3c.hive.oss.controller.vo.HiveSyncVO;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -20,7 +18,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static cc.cc3c.hive.domain.model.HiveRecordSource.ALIBABA_ACHIEVE;
-import static cc.cc3c.hive.domain.model.HiveRecordSource.ALIBABA_STANDARD;
 
 @Slf4j
 @Service

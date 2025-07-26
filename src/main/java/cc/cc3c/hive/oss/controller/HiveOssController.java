@@ -21,14 +21,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -55,6 +56,16 @@ public class HiveOssController {
         return Arrays.stream(HiveRecordSource.values()).map(x -> x.name()).toList();
     }
 
+    @GetMapping("/buckets/{bucket}/files/{fileKey}")
+    public ResponseEntity<HiveRecordVO> getFile(@PathVariable("bucket") HiveRecordSource source,
+                                                @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
+        if (optional.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(buildHiveRecordVO(optional.get()));
+    }
+
     @GetMapping("/buckets/{bucket}/files")
     public HiveRecordsVO getFiles(@PathVariable("bucket") HiveRecordSource source,
                                   @RequestParam("page") Integer page,
@@ -63,41 +74,44 @@ public class HiveOssController {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
         Page<HiveRecord> pageResult = hiveRecordRepository.findBySourceAndDeletedIsFalse(pageable, source);
 
-        List<HiveRecordVO> list = pageResult.stream().map(x -> {
-            boolean restorable = source.isRestoreRequired() &&
-                    (x.getRestoreTime() == null || x.getRestoreTime().isBefore(LocalDateTime.now()));
-            boolean downloadable = !restorable &&
-                    (x.getDownloadStatus() == null || x.getDownloadStatus() == HiveDownloadStatus.failed);
-
-            File downloadFile = hiveDownloadService.getDownloadFile(x);
-            String localPath = x.getDownloadStatus() != null && x.getDownloadStatus() == HiveDownloadStatus.success ?
-                    downloadFile.toURI().toString().replaceFirst("^file:/", "file:///") : null;
-            Boolean localPathExists = null;
-            if (StringUtils.isNotEmpty(localPath)) {
-                localPathExists = downloadFile.exists();
-            }
-            return HiveRecordVO.builder().fileName(x.getFileName())
-                    .fileKey(x.getFileKey())
-                    .zipped(x.getZipped())
-                    .size(x.getSize())
-                    .status(x.getStatus().name())
-                    .updateTime(x.getUpdateTime())
-                    .unfreezeTime(x.getRestoreTime())
-                    .restorable(restorable)
-                    .downloadable(downloadable)
-                    .localPath(localPath)
-                    .localPathExists(localPathExists)
-                    .deletable(x.getDeletable())
-                    .build();
-        }).toList();
+        List<HiveRecordVO> list = pageResult.stream().map(this::buildHiveRecordVO).toList();
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
     }
 
-    @DeleteMapping("/files/{fileKey}")
-    public ResponseEntity<Void> deleteFiles(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    private HiveRecordVO buildHiveRecordVO(HiveRecord record) {
+        boolean restorable = record.getSource().isRestoreRequired() &&
+                (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
+        boolean downloadable = !restorable &&
+                (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
+
+        File downloadFile = hiveDownloadService.getDownloadFile(record);
+        String localPath = record.getDownloadStatus() != null && record.getDownloadStatus() == HiveDownloadStatus.success ?
+                downloadFile.toURI().toString().replaceFirst("^file:/", "file:///") : null;
+        Boolean localPathExists = null;
+        if (StringUtils.isNotEmpty(localPath)) {
+            localPathExists = downloadFile.exists();
+        }
+        return HiveRecordVO.builder().fileName(record.getFileName())
+                .fileKey(record.getFileKey())
+                .zipped(record.getZipped())
+                .size(record.getSize())
+                .status(record.getStatus().name())
+                .updateTime(record.getUpdateTime())
+                .unfreezeTime(record.getRestoreTime())
+                .restorable(restorable)
+                .downloadable(downloadable)
+                .localPath(localPath)
+                .localPathExists(localPathExists)
+                .deletable(record.getDeletable())
+                .build();
+    }
+
+    @DeleteMapping("/buckets/{bucket}/files/{fileKey}")
+    public ResponseEntity<Void> deleteFiles(@PathVariable("bucket") HiveRecordSource source,
+                                            @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         hiveRecord.setStatus(HiveRecordStatus.TO_BE_DELETED);
@@ -106,11 +120,12 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/files/unfreeze/{fileKey}")
-    public ResponseEntity<Void> unfreezeFiles(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    @PostMapping("/buckets/{bucket}/files/unfreeze/{fileKey}")
+    public ResponseEntity<Void> unfreezeFiles(@PathVariable("bucket") HiveRecordSource source,
+                                              @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getSource()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getSource()));
@@ -120,11 +135,12 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/files/unfreeze-status/{fileKey}")
-    public ResponseEntity<HiveUnfreezeVO> unfreezeState(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    @GetMapping("/buckets/{bucket}/files/unfreeze-status/{fileKey}")
+    public ResponseEntity<HiveUnfreezeVO> unfreezeState(@PathVariable("bucket") HiveRecordSource source,
+                                                        @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getSource()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getSource()));
@@ -137,11 +153,12 @@ public class HiveOssController {
         return ResponseEntity.ok(HiveUnfreezeVO.builder().unfrozen(false).build());
     }
 
-    @PostMapping("/files/download-task/{fileKey}")
-    public ResponseEntity<Void> downloadTask(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    @PostMapping("/buckets/{bucket}/files/download-task/{fileKey}")
+    public ResponseEntity<Void> downloadTask(@PathVariable("bucket") HiveRecordSource source,
+                                             @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         try {
@@ -153,11 +170,12 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/files/download-task-status/{fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    @GetMapping("/buckets/{bucket}/files/download-task-status/{fileKey}")
+    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(@PathVariable("bucket") HiveRecordSource source,
+                                                                   @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         if (hiveRecord.getDownloadStatus() == null) {
@@ -172,20 +190,19 @@ public class HiveOssController {
         return ResponseEntity.ok(builder.build());
     }
 
-    @PostMapping("/files/release-local/{fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(@PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByFileKey(fileKey);
+    @PostMapping("/buckets/{bucket}/files/release-local/{fileKey}")
+    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(@PathVariable("bucket") HiveRecordSource source,
+                                                             @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         hiveRecordRepository.updateDownloadStatus(fileKey, null);
         File downloadFile = hiveDownloadService.getDownloadFile(hiveRecord);
-        try {
-            FileUtils.forceDelete(downloadFile);
-        } catch (IOException e) {
-            log.error("failed to delete file {}", downloadFile, e);
-            return ResponseEntity.internalServerError().build();
+        boolean deleted = FileUtils.deleteQuietly(downloadFile);
+        if (!deleted) {
+            log.error("failed to delete file {}", downloadFile);
         }
         return ResponseEntity.ok().build();
     }
@@ -221,5 +238,37 @@ public class HiveOssController {
             log.error("sync remote failed {}", source, e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    private final Path uploadRoot = Paths.get("uploads");
+
+    @PostMapping
+    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Empty file");
+        }
+
+        String originalFilename = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
+        if (originalFilename.contains("..")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file path");
+        }
+
+        String dateFolder = LocalDate.now().toString(); // yyyy-MM-dd
+        Path targetDir = uploadRoot.resolve(dateFolder);
+        Files.createDirectories(targetDir);
+
+        String filename = UUID.randomUUID() + "-" + originalFilename;
+        Path targetPath = targetDir.resolve(filename);
+
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("originalFilename", originalFilename);
+        result.put("storedPath", targetPath.toString());
+        result.put("size", file.getSize());
+
+        return ResponseEntity.ok(result);
     }
 }
