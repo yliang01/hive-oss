@@ -133,7 +133,8 @@ POST /buckets/{bucket}/files/unfreeze/{fileKey}
 
 **响应：**
 
-- 成功: 200 OK
+- 200 OK: 解冻立即完成
+- 202 Accepted: 解冻请求已接受，正在处理中
 - 失败: 4xx/5xx 错误
 
 ### 6. 查询解冻状态
@@ -147,13 +148,11 @@ GET /buckets/{bucket}/files/unfreeze-status/{fileKey}
 - `bucket`: 桶名称（路径参数）
 - `fileKey`: 文件Key（路径参数）
 
-**响应格式：**
+**响应：**
 
-```json
-{
-  "unfrozen": true
-}
-```
+- 200 OK: 解冻已完成
+- 202 Accepted: 解冻仍在进行中
+- 失败: 4xx/5xx 错误
 
 ### 7. 释放本地文件
 

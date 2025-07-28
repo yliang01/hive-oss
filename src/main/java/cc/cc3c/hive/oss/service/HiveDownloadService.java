@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -62,7 +63,7 @@ public class HiveDownloadService {
         HiveOssTask task = HiveOssTask.createTask()
                 .withBucket(hiveRecord.getSource())
                 .withKey(hiveRecord.getFileKey())
-                .withFile(getDownloadFile(hiveRecord));
+                .withOutputStream(new FileOutputStream(getDownloadFile(hiveRecord)));
         if (!HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
             task = task.withEncryption(hiveRecord.getFileName());
         }

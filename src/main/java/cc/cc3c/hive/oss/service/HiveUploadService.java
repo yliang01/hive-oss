@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -94,7 +95,7 @@ public class HiveUploadService implements FileAlterationListener {
             task = HiveOssTask.createTask()
                     .withBucket(source)
                     .withKey(fileKey)
-                    .withFile(file)
+                    .withInputStream(new FileInputStream(file))
                     .withEncryption(fileName);
             HiveRecord hiveRecord = new HiveRecord();
             hiveRecord.setFileName(fileName);

@@ -142,7 +142,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
         ReentrantLock lock = new ReentrantLock();
         Condition condition = lock.newCondition();
         lock.lock();
-        try (InputStream inputStream = getInputStream(task)) {
+        try (InputStream inputStream = task.getInputStream()) {
             ParallelFlux<DataChunk> uploadFlux = getUploadFlux(task, inputStream);
             subscribeUploadFlux(uploadFlux, task, lock, condition);
             condition.await();
@@ -185,7 +185,7 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     @Override
     public void download(HiveOssTask task) throws Exception {
         HiveOssObject ossObject = ossClient.getObject(task);
-        try (InputStream inputStream = ossObject.getObjectContent(); OutputStream outputStream = getOutputStream(task)) {
+        try (InputStream inputStream = ossObject.getObjectContent(); OutputStream outputStream = task.getOutputStream()) {
             IOUtils.copyLarge(inputStream, outputStream);
         }
     }
@@ -193,26 +193,6 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     @Override
     public void delete(HiveOssTask task) {
         ossClient.deleteObject(task);
-    }
-
-    private InputStream getInputStream(HiveOssTask task) throws Exception {
-        InputStream inputStream;
-        if (task.isEncrypted()) {
-            inputStream = new CipherInputStream(new FileInputStream(task.getFile()), task.getEncryption().getEncryptCipher());
-        } else {
-            inputStream = new FileInputStream(task.getFile());
-        }
-        return inputStream;
-    }
-
-    private OutputStream getOutputStream(HiveOssTask task) throws Exception {
-        OutputStream outputStream;
-        if (task.isEncrypted()) {
-            outputStream = new CipherOutputStream(new FileOutputStream(task.getFile()), task.getEncryption().getDecryptCipher());
-        } else {
-            outputStream = new FileOutputStream(task.getFile());
-        }
-        return outputStream;
     }
 
     @AllArgsConstructor

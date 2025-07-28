@@ -483,9 +483,25 @@ function unfreezeFile(fileKey) {
 
   fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze/${fileKey}`, { method: 'POST' })
     .then(res => {
-      if (!res.ok) throw new Error('解冻请求失败');
-      // 开始轮询解冻状态
-      pollUnfreezeStatus(fileKey, btn, originalText);
+      if (res.status === 200) {
+        // 解冻成功，直接更新按钮状态
+        btn.textContent = '已解冻';
+        btn.classList.remove('btn-warning');
+        btn.classList.add('btn-success');
+        btn.disabled = true; // 解冻成功后禁用按钮
+        
+        // 延迟刷新文件信息
+        setTimeout(() => {
+          refreshSingleFile(fileKey);
+        }, 1000);
+        
+        showSuccess('文件解冻成功');
+      } else if (res.status === 202) {
+        // 解冻请求已接受，开始轮询状态
+        pollUnfreezeStatus(fileKey, btn, originalText);
+      } else {
+        throw new Error(`解冻请求失败: ${res.status}`);
+      }
     })
     .catch(e => {
       btn.disabled = false;
@@ -502,6 +518,7 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
     showError('解冻超时，请稍后重试');
     return;
   }
+  
   const currentBucket = getCurrentBucket();
   if (!currentBucket) {
     btn.disabled = false;
@@ -509,25 +526,31 @@ function pollUnfreezeStatus(fileKey, btn, originalText, tryCount = 0) {
     showError('未指定 bucket');
     return;
   }
+  
   fetch(`${API_BASE}/buckets/${currentBucket}/files/unfreeze-status/${fileKey}`)
     .then(res => {
-      if (!res.ok) throw new Error('查询解冻状态失败');
-      return res.json();
-    })
-    .then(data => {
-      if (data && data.unfrozen === true) {
+      if (res.status === 200) {
+        // 解冻完成
         btn.textContent = '已解冻';
         btn.classList.remove('btn-warning');
         btn.classList.add('btn-success');
+        btn.disabled = true; // 解冻成功后禁用按钮
+        
         setTimeout(() => {
           // 刷新单个文件信息
           refreshSingleFile(fileKey);
         }, 1000);
-      } else {
+        
+        showSuccess('文件解冻完成');
+      } else if (res.status === 202) {
+        // 仍在解冻中，继续轮询
         setTimeout(() => pollUnfreezeStatus(fileKey, btn, originalText, tryCount + 1), 3000);
+      } else {
+        throw new Error(`查询解冻状态失败: ${res.status}`);
       }
     })
     .catch(e => {
+      // 网络错误或其他错误，继续轮询
       setTimeout(() => pollUnfreezeStatus(fileKey, btn, originalText, tryCount + 1), 3000);
     });
 }

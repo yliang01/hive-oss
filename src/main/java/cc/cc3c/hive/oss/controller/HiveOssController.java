@@ -24,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -114,25 +115,37 @@ public class HiveOssController {
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getSource()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getSource()));
         if (HiveRestoreStatus.NOT_STARTED == restoreResult.getRestoreStatus()) {
             hiveOssService.using(hiveRecord.getSource()).restore(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getSource()));
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        } else if (HiveRestoreStatus.IN_PROGRESS == restoreResult.getRestoreStatus()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        } else if (HiveRestoreStatus.COMPLETED == restoreResult.getRestoreStatus()) {
+            ZonedDateTime converted = restoreResult.getExpiryDate().withZoneSameInstant(ZoneId.systemDefault());
+            hiveRecord.setRestoreTime(converted.toLocalDateTime());
+            hiveRecordRepository.save(hiveRecord);
+            return ResponseEntity.ok().build();
         }
-        return ResponseEntity.ok().build();
+        return ResponseEntity.internalServerError().build();
     }
 
     @GetMapping("/buckets/{bucket}/files/unfreeze-status/{fileKey}")
-    public ResponseEntity<HiveUnfreezeVO> unfreezeState(@PathVariable("bucket") HiveRecordSource source, @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<Void> unfreezeState(@PathVariable("bucket") HiveRecordSource source, @PathVariable("fileKey") String fileKey) {
         Optional<HiveRecord> optional = hiveRecordRepository.findBySourceAndFileKey(source, fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getSource()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getSource()));
-        if (HiveRestoreStatus.COMPLETED == restoreResult.getRestoreStatus()) {
+        if (HiveRestoreStatus.NOT_STARTED == restoreResult.getRestoreStatus()) {
+            return ResponseEntity.badRequest().build();
+        } else if (HiveRestoreStatus.IN_PROGRESS == restoreResult.getRestoreStatus()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        } else if (HiveRestoreStatus.COMPLETED == restoreResult.getRestoreStatus()) {
             ZonedDateTime converted = restoreResult.getExpiryDate().withZoneSameInstant(ZoneId.systemDefault());
             hiveRecord.setRestoreTime(converted.toLocalDateTime());
             hiveRecordRepository.save(hiveRecord);
-            return ResponseEntity.ok(HiveUnfreezeVO.builder().unfrozen(true).build());
+            return ResponseEntity.ok().build();
         }
-        return ResponseEntity.ok(HiveUnfreezeVO.builder().unfrozen(false).build());
+        return ResponseEntity.internalServerError().build();
     }
 
     @PostMapping("/buckets/{bucket}/files/download-task/{fileKey}")

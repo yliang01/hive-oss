@@ -5,17 +5,19 @@ import cc.cc3c.hive.encryption.HiveEncryption;
 import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 
-import java.io.File;
+import javax.crypto.CipherInputStream;
+import javax.crypto.CipherOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@Data
-@ToString
+@Getter
 public class HiveOssTask {
     public static HiveEncryptionConfig encryptionConfig;
     public static AlibabaOssConfig alibabaOssConfig;
@@ -27,13 +29,15 @@ public class HiveOssTask {
     @ToString.Include
     private String key;
 
-    private File file;
     private InputStream inputStream;
+    private OutputStream outputStream;
 
+    @Setter
     private String uploadId;
     private AtomicInteger currentPart = new AtomicInteger(0);
+    @Setter
     private Map<Integer, String> uploadedMap = new ConcurrentHashMap<>();
-
+    @Setter
     private int progress;
 
     public static HiveOssTask createTask() {
@@ -46,38 +50,49 @@ public class HiveOssTask {
 
     public HiveOssTask withBucket(HiveRecordSource source) {
         if (source == HiveRecordSource.ALIBABA_ACHIEVE) {
-            setBucket(alibabaOssConfig.getArchiveBucket());
+            this.bucket = alibabaOssConfig.getArchiveBucket();
         } else if (source == HiveRecordSource.ALIBABA_STANDARD) {
-            setBucket(alibabaOssConfig.getStandardBucket());
+            this.bucket = alibabaOssConfig.getStandardBucket();
         } else {
             throw new IllegalArgumentException("bad record source");
         }
         return this;
     }
 
-    public HiveOssTask withTencent() {
-        setBucket(tencentOssConfig.getBucket());
-        return this;
-    }
-
     public HiveOssTask withEncryption(String fileName) throws Exception {
-        setEncryption(new HiveEncryption(encryptionConfig, fileName));
+        this.encryption = new HiveEncryption(encryptionConfig, fileName);
         return this;
     }
 
     public HiveOssTask withKey(String key) {
-        setKey(key);
-        return this;
-    }
-
-    public HiveOssTask withFile(File file) {
-        setFile(file);
+        this.key = key;
         return this;
     }
 
     public HiveOssTask withInputStream(InputStream inputStream) {
-        setInputStream(inputStream);
+        this.inputStream = inputStream;
         return this;
+    }
+
+    public HiveOssTask withOutputStream(OutputStream outputStream) {
+        this.outputStream = outputStream;
+        return this;
+    }
+
+    public InputStream getInputStream(HiveOssTask task) {
+        if (task.isEncrypted()) {
+            return new CipherInputStream(inputStream, task.getEncryption().getEncryptCipher());
+        } else {
+            return inputStream;
+        }
+    }
+
+    public OutputStream getOutputStream(HiveOssTask task) {
+        if (task.isEncrypted()) {
+            return new CipherOutputStream(outputStream, task.getEncryption().getDecryptCipher());
+        } else {
+            return outputStream;
+        }
     }
 }
 
