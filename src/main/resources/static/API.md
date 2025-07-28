@@ -61,7 +61,52 @@ GET /buckets/{bucket}/files
 }
 ```
 
-### 3. 获取单个文件信息 ⭐ 新增
+### 3. 搜索文件 ⭐ 新增
+
+```
+GET /buckets/{bucket}/files/search
+```
+
+**请求参数：**
+
+- `bucket`: 桶名称（路径参数）
+- `keyword`: 搜索关键词（查询参数）
+- `page`: 页码，从0开始（查询参数，可选，默认0）
+- `pageSize`: 每页大小（查询参数，可选，默认50）
+
+**响应格式：**
+
+```json
+{
+  "files": [
+    {
+      "fileKey": "example/file.txt",
+      "fileName": "file.txt",
+      "size": 1024,
+      "zipped": false,
+      "status": "NORMAL",
+      "updateTime": "2024-01-01T12:00:00Z",
+      "unfreezeTime": null,
+      "restorable": false,
+      "downloadable": true,
+      "deletable": true,
+      "localPath": "/local/path/file.txt",
+      "localPathExists": true
+    }
+  ],
+  "total": 100,
+  "page": 0,
+  "pageSize": 50
+}
+```
+
+**说明：**
+- 支持模糊搜索，匹配文件名包含关键词的文件
+- 搜索不区分大小写
+- 返回格式与文件列表接口保持一致
+- 支持分页
+
+### 4. 获取单个文件信息
 
 ```
 GET /buckets/{bucket}/files/{fileKey}
@@ -104,7 +149,7 @@ GET /buckets/{bucket}/files/{fileKey}
 }
 ```
 
-### 4. 删除文件
+### 5. 删除文件
 
 ```
 DELETE /buckets/{bucket}/files/{fileKey}
@@ -120,7 +165,7 @@ DELETE /buckets/{bucket}/files/{fileKey}
 - 成功: 200 OK
 - 失败: 4xx/5xx 错误
 
-### 5. 解冻文件
+### 6. 解冻文件
 
 ```
 POST /buckets/{bucket}/files/unfreeze/{fileKey}
@@ -137,7 +182,7 @@ POST /buckets/{bucket}/files/unfreeze/{fileKey}
 - 202 Accepted: 解冻请求已接受，正在处理中
 - 失败: 4xx/5xx 错误
 
-### 6. 查询解冻状态
+### 7. 解冻状态管理
 
 ```
 GET /buckets/{bucket}/files/unfreeze-status/{fileKey}
