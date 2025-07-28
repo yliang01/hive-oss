@@ -5,6 +5,7 @@ const pageSize = 50;
 let currentPage = 1;
 let totalFiles = 0;
 let currentBucket = '';
+let currentSearchKeyword = ''; // 新增：当前搜索关键词
 
 // 获取当前 bucket
 function getCurrentBucket() {
@@ -116,7 +117,11 @@ function renderFiles(files) {
   }
 
   if (!files.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary">暂无文件</td></tr>';
+    if (currentSearchKeyword.trim()) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary">未找到包含"${currentSearchKeyword}"的文件</td></tr>`;
+    } else {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary">暂无文件</td></tr>';
+    }
     return;
   }
 
@@ -142,7 +147,13 @@ function listFiles() {
   const tbody = document.querySelector('#file-table tbody');
   tbody.innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
   
-  return fetch(`${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`)
+  // 构建API URL
+  let apiUrl = `${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`;
+  if (currentSearchKeyword.trim()) {
+    apiUrl = `${API_BASE}/buckets/${currentBucket}/files/search?keyword=${encodeURIComponent(currentSearchKeyword.trim())}&page=${currentPage - 1}&pageSize=${pageSize}`;
+  }
+  
+  return fetch(apiUrl)
     .then(res => {
       if (!res.ok) throw new Error('获取文件列表失败');
       return res.json();
@@ -184,6 +195,14 @@ function renderPagination(data) {
   
   const pagination = document.getElementById('pagination');
   pagination.innerHTML = '';
+  
+  // 显示搜索信息
+  if (currentSearchKeyword.trim()) {
+    const searchInfo = document.createElement('div');
+    searchInfo.className = 'text-center text-muted mb-2';
+    searchInfo.innerHTML = `搜索"${currentSearchKeyword}"，共找到 ${totalFiles} 个文件`;
+    pagination.appendChild(searchInfo);
+  }
   
   if (totalPages <= 1) return;
   
@@ -821,6 +840,51 @@ function uploadFile() {
   xhr.send(formData);
 }
 
+// 搜索相关函数
+function performSearch() {
+  const searchInput = document.getElementById('searchInput');
+  const keyword = searchInput.value.trim();
+  
+  if (keyword === currentSearchKeyword) {
+    return; // 关键词没有变化，不需要重新搜索
+  }
+  
+  currentSearchKeyword = keyword;
+  currentPage = 1; // 搜索时重置到第一页
+  
+  // 更新清除按钮显示状态
+  updateClearSearchButton();
+  
+  // 执行搜索
+  listFiles();
+}
+
+function clearSearch() {
+  const searchInput = document.getElementById('searchInput');
+  searchInput.value = '';
+  currentSearchKeyword = '';
+  currentPage = 1; // 清除搜索时重置到第一页
+  
+  // 更新清除按钮显示状态
+  updateClearSearchButton();
+  
+  // 重新加载文件列表
+  listFiles();
+}
+
+function handleSearchKeyPress(event) {
+  if (event.key === 'Enter') {
+    performSearch();
+  }
+}
+
+function updateClearSearchButton() {
+  const clearBtn = document.getElementById('clearSearchBtn');
+  if (clearBtn) {
+    clearBtn.style.display = currentSearchKeyword.trim() ? 'block' : 'none';
+  }
+}
+
 // 刷新文件列表（带动画效果）
 function refreshFileList() {
   const refreshBtn = document.getElementById('refresh-btn');
@@ -840,6 +904,9 @@ function refreshFileList() {
 window.backToBuckets = backToBuckets;
 window.listFiles = listFiles; // 新增：暴露文件列表刷新函数
 window.refreshFileList = refreshFileList; // 新增：暴露带动画的刷新函数
+window.performSearch = performSearch; // 新增：暴露搜索函数
+window.clearSearch = clearSearch; // 新增：暴露清除搜索函数
+window.handleSearchKeyPress = handleSearchKeyPress; // 新增：暴露搜索按键处理函数
 window.downloadFile = downloadFile;
 window.deleteFile = deleteFile;
 window.changePage = changePage;

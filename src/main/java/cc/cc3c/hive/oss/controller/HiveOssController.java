@@ -24,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -70,7 +71,9 @@ public class HiveOssController {
     }
 
     @GetMapping("/buckets/{bucket}/files")
-    public HiveRecordsVO getFiles(@PathVariable("bucket") HiveRecordSource source, @RequestParam("page") Integer page, @RequestParam("pageSize") Integer pageSize) {
+    public HiveRecordsVO getFiles(@PathVariable("bucket") HiveRecordSource source,
+                                  @RequestParam("page") Integer page,
+                                  @RequestParam("pageSize") Integer pageSize) {
 
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
         Page<HiveRecord> pageResult = hiveRecordRepository.findBySourceAndDeletedIsFalse(pageable, source);
@@ -78,6 +81,22 @@ public class HiveOssController {
         List<HiveRecordVO> list = pageResult.stream().map(this::buildHiveRecordVO).toList();
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
     }
+
+    @GetMapping("/buckets/{bucket}/files/search")
+    public HiveRecordsVO searchFiles(@PathVariable("bucket") HiveRecordSource source,
+                                     @RequestParam("keyword") String keyword,
+                                     @RequestParam("page") Integer page,
+                                     @RequestParam("pageSize") Integer pageSize) {
+
+        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
+        Specification<HiveRecord> specification = (root, query, cb) ->
+                keyword == null ? null : cb.like(root.get("fileName"), "%" + keyword + "%");
+        Page<HiveRecord> pageResult = hiveRecordRepository.findAll(specification, pageable);
+
+        List<HiveRecordVO> list = pageResult.stream().map(this::buildHiveRecordVO).toList();
+        return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
+    }
+
 
     private HiveRecordVO buildHiveRecordVO(HiveRecord record) {
         boolean restorable = record.getSource().isRestoreRequired() && (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
@@ -234,7 +253,7 @@ public class HiveOssController {
     @PostMapping("/buckets/{bucket}/files/upload")
     public ResponseEntity<HiveUploadVO> upload(@PathVariable("bucket") HiveRecordSource source, HttpServletRequest request) throws IOException {
         JakartaServletFileUpload upload = new JakartaServletFileUpload();
-        upload.setFileSizeMax(-1); // 不限制大小
+        upload.setFileSizeMax(100 * 1024 * 1024);
         FileItemInputIterator iter = upload.getItemIterator(request);
         FileItemInput item = iter.next();
         try {

@@ -223,6 +223,56 @@
   border-color: rgba(23, 162, 184, 0.2);
 }
 
+/* 搜索框样式 */
+.search-container {
+  position: relative;
+}
+
+.search-container .input-group {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.search-container .form-control {
+  border: 1px solid #dee2e6;
+  border-right: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.search-container .form-control:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.search-container .btn {
+  border: 1px solid #dee2e6;
+  border-left: none;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  color: #6c757d;
+  transition: all 0.2s ease;
+}
+
+.search-container .btn:hover {
+  background: #f8f9fa;
+  color: #0d6efd;
+}
+
+.search-container .btn:active {
+  background: #e9ecef;
+}
+
+/* 搜索结果显示样式 */
+.search-info {
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  border-left: 4px solid #0d6efd;
+}
+
 /* 确认对话框样式 */
 #confirmModal .modal-content {
   border: none;
