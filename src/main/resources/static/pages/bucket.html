@@ -4,16 +4,26 @@
     <meta charset="UTF-8"/>
     <title>OSS 管理前端</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="../css/style.css" rel="stylesheet">
 </head>
 <body>
+<!-- 通知容器 -->
+<div id="notification-container" class="position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+
 <div class="container my-5">
     <h1 class="mb-3">OSS 管理前端</h1>
     <hr/>
     <section>
-        <h2 class="h5 mb-3">Bucket 列表</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center">
+                <h2 class="h5 mb-0 me-3">Bucket 列表</h2>
+                <button onclick="refreshBuckets()" class="btn btn-outline-secondary refresh-btn" id="refresh-btn">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+        </div>
         <ul id="buckets" class="list-group mb-3"></ul>
-        <button class="btn btn-primary" onclick="listBuckets()">刷新</button>
     </section>
 </div>
 <script type="module" src="../js/bucket.js"></script>

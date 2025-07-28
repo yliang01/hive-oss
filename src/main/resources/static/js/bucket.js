@@ -29,14 +29,34 @@ function renderBuckets(buckets) {
 
 // 获取 bucket 列表
 function listBuckets() {
-  fetch(`${API_BASE}/buckets`)
+  return fetch(`${API_BASE}/buckets`)
     .then(res => {
       if (!res.ok) throw new Error('获取 bucket 失败');
       return res.json();
     })
     .then(renderBuckets)
-    .catch(e => showError(e.message));
+    .catch(e => {
+      showError(e.message);
+      throw e;
+    });
+}
+
+// 刷新 bucket 列表（带动画效果）
+function refreshBuckets() {
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add('spinning');
+  }
+  
+  listBuckets().finally(() => {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.classList.remove('spinning');
+    }
+  });
 }
 
 window.listBuckets = listBuckets;
+window.refreshBuckets = refreshBuckets; // 新增：暴露带动画的刷新函数
 window.onload = listBuckets; 

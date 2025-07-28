@@ -1,4 +1,4 @@
-import { formatSize, formatDate, showError, showSuccess } from './utils.js';
+import { formatSize, formatDate, showError, showSuccess, showWarning, showInfo, showConfirm } from './utils.js';
 
 const API_BASE = 'http://localhost:8080';
 const pageSize = 50;
@@ -133,7 +133,7 @@ function listFiles() {
   currentBucket = getCurrentBucket();
   if (!currentBucket) {
     showError('未指定 bucket');
-    return;
+    return Promise.reject(new Error('未指定 bucket'));
   }
   
   document.getElementById('current-bucket').textContent = currentBucket;
@@ -142,7 +142,7 @@ function listFiles() {
   const tbody = document.querySelector('#file-table tbody');
   tbody.innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
   
-  fetch(`${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`)
+  return fetch(`${API_BASE}/buckets/${currentBucket}/files?page=${currentPage - 1}&pageSize=${pageSize}`)
     .then(res => {
       if (!res.ok) throw new Error('获取文件列表失败');
       return res.json();
@@ -162,7 +162,10 @@ function listFiles() {
         throw new Error('响应格式错误');
       }
     })
-    .catch(e => showError(e.message));
+    .catch(e => {
+      showError(e.message);
+      throw e;
+    });
 }
 
 // 渲染分页
@@ -377,20 +380,21 @@ function showDownloadProgress(msg, fileKey) {
 
 // 删除文件
 function deleteFile(fileKey) {
-  if (!confirm('确定要删除该文件吗？')) return;
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
-    return;
-  }
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`, { method: 'DELETE' })
-    .then(res => {
-      if (!res.ok) throw new Error('删除文件失败');
-      showSuccess('删除操作已提交');
-      // 删除后刷新该文件的状态
-      refreshSingleFile(fileKey);
-    })
-    .catch(e => showError(e.message));
+  showConfirm('确定要删除该文件吗？', () => {
+    const currentBucket = getCurrentBucket();
+    if (!currentBucket) {
+      showError('未指定 bucket');
+      return;
+    }
+    fetch(`${API_BASE}/buckets/${currentBucket}/files/${fileKey}`, { method: 'DELETE' })
+      .then(res => {
+        if (!res.ok) throw new Error('删除文件失败');
+        showSuccess('删除操作已提交');
+        // 删除后刷新该文件的状态
+        refreshSingleFile(fileKey);
+      })
+      .catch(e => showError(e.message));
+  });
 }
 
 
@@ -442,14 +446,13 @@ function syncRemoteFiles() {
     .then(data => {
       // 展示统计信息
       if (typeof data.ossTotal !== 'undefined') {
-        alert(
-          `远程同步完成：\n` +
-          `OSS总数: ${data.ossTotal}\n` +
-          `OSS独有: ${data.ossOnly}\n` +
-          `OSS与DB匹配: ${data.ossToDbMatched}\n` +
-          `OSS与DB不匹配: ${data.ossToDbMismatched}\n` +
-          `DB与OSS不匹配: ${data.dbToOssMismatched}`
-        );
+        const message = `远程同步完成！<br>
+          <strong>OSS总数:</strong> ${data.ossTotal}<br>
+          <strong>OSS独有:</strong> ${data.ossOnly}<br>
+          <strong>OSS与DB匹配:</strong> ${data.ossToDbMatched}<br>
+          <strong>OSS与DB不匹配:</strong> ${data.ossToDbMismatched}<br>
+          <strong>DB与OSS不匹配:</strong> ${data.dbToOssMismatched}`;
+        showInfo(message);
       } else {
         showSuccess('远程同步成功');
       }
@@ -561,7 +564,7 @@ function getFileByKey(fileKey) {
 
 // 新增：处理本地文件不存在时的重新下载逻辑
 function handleLocalPathMissingDownload(fileKey) {
-  if (confirm('本地文件不存在，是否重新下载？')) {
+  showConfirm('本地文件不存在，是否重新下载？', () => {
     // 让下载按钮可用（无视downloadable）
     const btn = document.querySelector(`.download-btn[data-filekey="${fileKey}"]`);
     if (btn) {
@@ -570,25 +573,26 @@ function handleLocalPathMissingDownload(fileKey) {
       // 立即触发下载
       downloadFile(fileKey);
     }
-  }
+  });
 }
 
 // 新增：释放本地文件
 function releaseLocalFile(fileKey, localPath) {
-  if (!confirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。')) return;
-  const currentBucket = getCurrentBucket();
-  if (!currentBucket) {
-    showError('未指定 bucket');
-    return;
-  }
-  fetch(`${API_BASE}/buckets/${currentBucket}/files/release-local/${fileKey}`, { method: 'POST' })
-    .then(res => {
-      if (!res.ok) throw new Error('释放本地文件失败');
-      showSuccess('本地文件已释放');
-      // 刷新单个文件信息
-      refreshSingleFile(fileKey);
-    })
-    .catch(e => showError(e.message));
+  showConfirm('确定要释放本地文件吗？此操作会删除本地副本，但不会影响云端文件。', () => {
+    const currentBucket = getCurrentBucket();
+    if (!currentBucket) {
+      showError('未指定 bucket');
+      return;
+    }
+    fetch(`${API_BASE}/buckets/${currentBucket}/files/release-local/${fileKey}`, { method: 'POST' })
+      .then(res => {
+        if (!res.ok) throw new Error('释放本地文件失败');
+        showSuccess('本地文件已释放');
+        // 刷新单个文件信息
+        refreshSingleFile(fileKey);
+      })
+      .catch(e => showError(e.message));
+  });
 }
 
 // 新增：上传相关函数
@@ -794,7 +798,25 @@ function uploadFile() {
   xhr.send(formData);
 }
 
+// 刷新文件列表（带动画效果）
+function refreshFileList() {
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add('spinning');
+  }
+  
+  listFiles().finally(() => {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.classList.remove('spinning');
+    }
+  });
+}
+
 window.backToBuckets = backToBuckets;
+window.listFiles = listFiles; // 新增：暴露文件列表刷新函数
+window.refreshFileList = refreshFileList; // 新增：暴露带动画的刷新函数
 window.downloadFile = downloadFile;
 window.deleteFile = deleteFile;
 window.changePage = changePage;
