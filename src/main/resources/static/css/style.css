@@ -51,4 +51,115 @@
 /* 禁用状态下的按钮样式 */
 .btn:disabled .sync-icon {
   opacity: 0.5;
+}
+
+/* 上传区域样式 */
+.upload-area {
+  border: 2px dashed #dee2e6;
+  border-radius: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  background: #f8f9fa;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.upload-area:hover {
+  border-color: #0d6efd;
+  background: #f0f8ff;
+}
+
+.upload-area.dragover {
+  border-color: #0d6efd;
+  background: #e3f2fd;
+  transform: scale(1.02);
+}
+
+.upload-icon {
+  font-size: 3rem;
+  color: #6c757d;
+  margin-bottom: 1rem;
+}
+
+.upload-text {
+  font-size: 1.1rem;
+  color: #495057;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.upload-hint {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin-bottom: 0;
+}
+
+/* 文件信息卡片样式 */
+#fileInfo .alert {
+  border-radius: 8px;
+  border: 1px solid #d1ecf1;
+  background: #f8f9fa;
+}
+
+/* 进度条样式 */
+.progress {
+  height: 8px;
+  border-radius: 4px;
+  background: #e9ecef;
+}
+
+.progress-bar {
+  background: linear-gradient(45deg, #0d6efd, #0b5ed7);
+  border-radius: 4px;
+}
+
+/* 上传按钮动画 */
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 模态框样式优化 */
+.modal-content {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.modal-header {
+  border-bottom: 1px solid #e9ecef;
+  padding: 1.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  border-top: 1px solid #e9ecef;
+  padding: 1.5rem;
+}
+
+/* 新文件高亮动画效果 */
+@keyframes newFileHighlight {
+  0% {
+    background-color: #e8f5e8;
+    transform: scale(1.02);
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.3);
+  }
+  50% {
+    background-color: #d4edda;
+    transform: scale(1.01);
+    box-shadow: 0 0 15px rgba(40, 167, 69, 0.4);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+.new-file-highlight {
+  animation: newFileHighlight 2s ease-out forwards;
 } 

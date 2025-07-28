@@ -1,6 +1,11 @@
 spring.config.import: classpath:external-secret.yml
 spring.profiles.active: test
 
+spring:
+  servlet:
+    multipart:
+      enabled: false
+
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\
   downloadDir: C:\Users\YLiang\Downloads\hive\download\

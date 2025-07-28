@@ -44,6 +44,36 @@ function updateFileRow(fileKey, fileData) {
   }
 }
 
+// 新增：将新文件添加到列表最上端
+function addNewFileToTop(fileData) {
+  const tbody = document.querySelector('#file-table tbody');
+  
+  // 如果当前显示的是"暂无文件"，先清空
+  if (tbody.innerHTML.includes('暂无文件')) {
+    tbody.innerHTML = '';
+  }
+  
+  // 创建新的文件行
+  const tr = document.createElement('tr');
+  tr.setAttribute('data-filekey', fileData.fileKey);
+  tr.innerHTML = generateFileRowHTML(fileData);
+  
+  // 添加到表格的最上端
+  if (tbody.firstChild) {
+    tbody.insertBefore(tr, tbody.firstChild);
+  } else {
+    tbody.appendChild(tr);
+  }
+  
+  // 添加高亮效果
+  tr.classList.add('new-file-highlight');
+  
+  // 2秒后移除动画类
+  setTimeout(() => {
+    tr.classList.remove('new-file-highlight');
+  }, 2000);
+}
+
 // 新增：生成文件行HTML
 function generateFileRowHTML(file) {
   return `
@@ -561,6 +591,209 @@ function releaseLocalFile(fileKey, localPath) {
     .catch(e => showError(e.message));
 }
 
+// 新增：上传相关函数
+function openUploadModal() {
+  const modal = new bootstrap.Modal(document.getElementById('uploadModal'));
+  modal.show();
+  setupUploadArea();
+}
+
+function setupUploadArea() {
+  const uploadArea = document.getElementById('uploadArea');
+  const fileInput = document.getElementById('fileInput');
+  
+  // 点击上传区域触发文件选择
+  uploadArea.addEventListener('click', () => {
+    fileInput.click();
+  });
+  
+  // 文件选择事件
+  fileInput.addEventListener('change', handleFileSelect);
+  
+  // 拖拽事件
+  uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+  });
+  
+  uploadArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+  });
+  
+  uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      fileInput.files = files;
+      handleFileSelect();
+    }
+  });
+}
+
+function handleFileSelect() {
+  const fileInput = document.getElementById('fileInput');
+  const file = fileInput.files[0];
+  const fileInfo = document.getElementById('fileInfo');
+  const fileName = document.getElementById('fileName');
+  const fileSize = document.getElementById('fileSize');
+  const uploadBtn = document.getElementById('uploadBtn');
+  
+  if (file) {
+    // 显示文件信息
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    fileInfo.style.display = 'block';
+    
+    // 启用上传按钮
+    uploadBtn.disabled = false;
+  } else {
+    fileInfo.style.display = 'none';
+    uploadBtn.disabled = true;
+  }
+}
+
+function clearFileSelection() {
+  const fileInput = document.getElementById('fileInput');
+  const fileInfo = document.getElementById('fileInfo');
+  const uploadBtn = document.getElementById('uploadBtn');
+  
+  fileInput.value = '';
+  fileInfo.style.display = 'none';
+  uploadBtn.disabled = true;
+}
+
+function uploadFile() {
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const uploadProgress = document.getElementById('uploadProgress');
+  const progressBar = uploadProgress.querySelector('.progress-bar');
+  const uploadStatus = document.getElementById('uploadStatus');
+  
+  const file = fileInput.files[0];
+  const currentBucket = getCurrentBucket();
+  
+  if (!file) {
+    showError('请选择要上传的文件');
+    return;
+  }
+  
+  if (!currentBucket) {
+    showError('未指定 bucket');
+    return;
+  }
+  
+  // 检查文件大小（100MB限制）
+  if (file.size > 100 * 1024 * 1024) {
+    showError('文件大小不能超过100MB');
+    return;
+  }
+  
+  // 显示进度条
+  uploadProgress.style.display = 'block';
+  uploadBtn.disabled = true;
+  uploadStatus.textContent = '准备上传...';
+  progressBar.style.width = '0%';
+  
+  // 创建FormData
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // 创建XMLHttpRequest以支持进度监控
+  const xhr = new XMLHttpRequest();
+  
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      const percentComplete = (e.loaded / e.total) * 100;
+      progressBar.style.width = percentComplete + '%';
+      uploadStatus.textContent = `上传中... ${Math.round(percentComplete)}%`;
+    }
+  });
+  
+  xhr.addEventListener('load', () => {
+    if (xhr.status === 200) {
+      try {
+        const response = JSON.parse(xhr.responseText);
+        
+        progressBar.style.width = '100%';
+        uploadStatus.textContent = '上传成功！';
+        showSuccess('文件上传成功');
+        
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+        modal.hide();
+        
+        // 根据fileKey获取文件信息并添加到列表顶部
+        if (response.fileKey) {
+          // 获取刚上传文件的详细信息
+          const currentBucket = getCurrentBucket();
+          fetch(`${API_BASE}/buckets/${currentBucket}/files/${response.fileKey}`)
+            .then(res => {
+              if (!res.ok) throw new Error('获取文件信息失败');
+              return res.json();
+            })
+            .then(fileData => {
+              addNewFileToTop(fileData);
+            })
+            .catch(e => {
+              console.error('获取文件信息失败:', e);
+              // 即使获取详细信息失败，也显示上传成功
+            });
+        }
+        
+        // 重置表单
+        clearFileSelection();
+        uploadProgress.style.display = 'none';
+      } catch (e) {
+        showError('上传响应格式错误');
+      }
+    } else {
+      // 根据不同的HTTP状态码显示不同的错误信息
+      let errorMessage = '上传失败';
+      try {
+        const errorResponse = JSON.parse(xhr.responseText);
+        if (errorResponse.error) {
+          errorMessage = errorResponse.error;
+        }
+      } catch (e) {
+        // 如果无法解析错误响应，使用默认错误信息
+        switch (xhr.status) {
+          case 400:
+            errorMessage = '文件格式不支持或文件过大';
+            break;
+          case 409:
+            errorMessage = '文件已存在';
+            break;
+          case 413:
+            errorMessage = '文件大小超限';
+            break;
+          default:
+            errorMessage = '上传失败';
+        }
+      }
+      showError(errorMessage);
+    }
+    uploadBtn.disabled = false;
+  });
+  
+  xhr.addEventListener('error', () => {
+    showError('网络错误，上传失败');
+    uploadBtn.disabled = false;
+    uploadProgress.style.display = 'none';
+  });
+  
+  xhr.addEventListener('abort', () => {
+    showError('上传已取消');
+    uploadBtn.disabled = false;
+    uploadProgress.style.display = 'none';
+  });
+  
+  // 发送请求
+  xhr.open('POST', `${API_BASE}/buckets/${currentBucket}/files/upload`);
+  xhr.send(formData);
+}
+
 window.backToBuckets = backToBuckets;
 window.downloadFile = downloadFile;
 window.deleteFile = deleteFile;
@@ -573,6 +806,10 @@ window.handleLocalPathMissingDownload = handleLocalPathMissingDownload;
 window.releaseLocalFile = releaseLocalFile;
 window.refreshSingleFile = refreshSingleFile; // 新增：暴露刷新函数
 window.updateFileRow = updateFileRow; // 新增：暴露更新函数
+window.addNewFileToTop = addNewFileToTop; // 新增：暴露添加新文件函数
 window.generateFileRowHTML = generateFileRowHTML; // 新增：暴露生成HTML函数
+window.openUploadModal = openUploadModal; // 新增：暴露上传模态框函数
+window.clearFileSelection = clearFileSelection; // 新增：暴露清除文件选择函数
+window.uploadFile = uploadFile; // 新增：暴露上传文件函数
 
 window.onload = listFiles; 

@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.ToString;
 
 import java.io.File;
+import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,6 +28,7 @@ public class HiveOssTask {
     private String key;
 
     private File file;
+    private InputStream inputStream;
 
     private String uploadId;
     private AtomicInteger currentPart = new AtomicInteger(0);
@@ -70,6 +72,11 @@ public class HiveOssTask {
 
     public HiveOssTask withFile(File file) {
         setFile(file);
+        return this;
+    }
+
+    public HiveOssTask withInputStream(InputStream inputStream) {
+        setInputStream(inputStream);
         return this;
     }
 }

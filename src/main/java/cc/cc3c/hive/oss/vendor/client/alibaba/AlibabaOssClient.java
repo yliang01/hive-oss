@@ -122,6 +122,10 @@ public class AlibabaOssClient implements HiveOssClient {
         return ossClient.doesObjectExist(task.getBucket(), task.getKey());
     }
 
+    public void putObject(HiveOssTask task) {
+        ossClient.putObject(task.getBucket(), task.getKey(), task.getInputStream());
+    }
+
     @Override
     public HiveOssObject getObject(HiveOssTask task) {
         GetObjectRequest getObjectRequest = new GetObjectRequest(task.getBucket(), task.getKey());

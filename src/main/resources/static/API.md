@@ -260,11 +260,43 @@ GET /files/download/{fileKey}
 - 成功: 文件流
 - 失败: 4xx/5xx 错误
 
+### 13. 上传文件 ⭐ 新增
+
+```
+POST /buckets/{bucket}/files/upload
+```
+
+**请求参数：**
+
+- `bucket`: 桶名称（路径参数）
+- `file`: 文件（multipart/form-data）
+
+**响应格式：**
+
+成功时（200 OK）：
+```json
+{
+  "fileKey": "example/file.txt"
+}
+```
+
+失败时（4xx/5xx）：
+- 400 Bad Request: 文件格式不支持或文件过大
+- 409 Conflict: 文件已存在
+- 413 Payload Too Large: 文件大小超限
+
+**错误响应：**
+
+- 400 Bad Request: 文件格式不支持或文件过大
+- 409 Conflict: 文件已存在
+- 413 Payload Too Large: 文件大小超限
+
 ## 文件状态说明
 
 - `NORMAL`: 正常状态
 - `DB_ONLY`: 仅数据库中存在
 - `TO_BE_DELETED`: 待删除状态
+- `UPLOADED`: 已上传状态
 
 ## 错误响应格式
 

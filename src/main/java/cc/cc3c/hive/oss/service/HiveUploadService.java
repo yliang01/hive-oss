@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 
 @Slf4j
 @Component
@@ -126,5 +127,27 @@ public class HiveUploadService implements FileAlterationListener {
     @Override
     public void onStop(FileAlterationObserver fileAlterationObserver) {
 
+    }
+
+    public String uploadSync(HiveRecordSource source, String fileName, InputStream inputStream) throws Exception {
+        String fileKey = DigestUtils.md5Hex(fileName);
+        HiveOssTask task = HiveOssTask.createTask()
+                .withBucket(source)
+                .withKey(fileKey)
+                .withInputStream(inputStream)
+                .withEncryption(fileName);
+        HiveRecord hiveRecord = new HiveRecord();
+        hiveRecord.setFileName(fileName);
+        hiveRecord.setFileKey(fileKey);
+        hiveRecord.setZipped(false);
+        hiveRecord.setSource(source);
+        hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
+        hiveRecordRepository.save(hiveRecord);
+
+        hiveOssService.using(source).uploadSync(task);
+
+        hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
+        hiveRecordRepository.save(hiveRecord);
+        return fileKey;
     }
 }

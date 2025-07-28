@@ -12,6 +12,8 @@ public interface HiveOss {
 
     List<HiveOssObject> listObjects(HiveOssTask task) throws Exception;
 
+    void uploadSync(HiveOssTask task) throws Exception;
+
     void upload(HiveOssTask task) throws Exception;
 
     HiveRestoreResult restoreCheck(HiveOssTask task);

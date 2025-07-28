@@ -104,6 +104,11 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
+    public void putObject(HiveOssTask task) {
+
+    }
+
+    @Override
     public HiveOssObject getObject(HiveOssTask task) {
         COSObject cosObject = ossClient.getObject(task.getBucket(), task.getKey());
         HiveOssObject hiveOssObject = new HiveOssObject();

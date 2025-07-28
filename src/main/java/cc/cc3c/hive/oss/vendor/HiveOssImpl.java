@@ -68,6 +68,11 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     }
 
     @Override
+    public void uploadSync(HiveOssTask task) throws Exception {
+        ossClient.putObject(task);
+    }
+
+    @Override
     public void upload(HiveOssTask task) throws Exception {
         Hooks.onErrorDropped(x -> {
         });
