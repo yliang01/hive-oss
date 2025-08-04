@@ -13,30 +13,36 @@ import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@Getter
 public class HiveOssTask {
     public static HiveEncryptionConfig encryptionConfig;
     public static AlibabaOssConfig alibabaOssConfig;
     public static TencentOssConfig tencentOssConfig;
 
     private HiveEncryption encryption;
+    @Getter
     @ToString.Include
     private String bucket;
+    @Getter
     @ToString.Include
     private String key;
 
     private InputStream inputStream;
     private OutputStream outputStream;
 
+    @Getter
     @Setter
     private String uploadId;
+    @Getter
     private AtomicInteger currentPart = new AtomicInteger(0);
+    @Getter
     @Setter
     private Map<Integer, String> uploadedMap = new ConcurrentHashMap<>();
+    @Getter
     @Setter
     private int progress;
 
@@ -60,7 +66,7 @@ public class HiveOssTask {
     }
 
     public HiveOssTask withEncryption(String fileName) throws Exception {
-        this.encryption = new HiveEncryption(encryptionConfig, fileName);
+        this.encryption = new HiveEncryption(encryptionConfig, fileName.getBytes(StandardCharsets.UTF_8));
         return this;
     }
 
@@ -79,17 +85,18 @@ public class HiveOssTask {
         return this;
     }
 
-    public InputStream getInputStream(HiveOssTask task) {
-        if (task.isEncrypted()) {
-            return new CipherInputStream(inputStream, task.getEncryption().getEncryptCipher());
+
+    public InputStream getInputStream() {
+        if (this.isEncrypted()) {
+            return new CipherInputStream(inputStream, encryption.getEncryptCipher());
         } else {
             return inputStream;
         }
     }
 
-    public OutputStream getOutputStream(HiveOssTask task) {
-        if (task.isEncrypted()) {
-            return new CipherOutputStream(outputStream, task.getEncryption().getDecryptCipher());
+    public OutputStream getOutputStream() {
+        if (this.isEncrypted()) {
+            return new CipherOutputStream(outputStream, encryption.getDecryptCipher());
         } else {
             return outputStream;
         }
