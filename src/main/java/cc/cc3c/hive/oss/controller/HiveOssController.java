@@ -89,8 +89,9 @@ public class HiveOssController {
                                      @RequestParam("pageSize") Integer pageSize) {
 
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
-        Specification<HiveRecord> specification = (root, query, cb) ->
-                keyword == null ? null : cb.like(root.get("fileName"), "%" + keyword + "%");
+        Specification<HiveRecord> specification = (root, query, builder) ->
+                keyword == null ? null : builder.like(root.get("fileName"), "%" + keyword + "%");
+        specification = specification.and((root, query, builder) -> builder.isFalse(root.get("deleted")));
         Page<HiveRecord> pageResult = hiveRecordRepository.findAll(specification, pageable);
 
         List<HiveRecordVO> list = pageResult.stream().map(this::buildHiveRecordVO).toList();
