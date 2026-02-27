@@ -5,7 +5,30 @@ spring:
   servlet:
     multipart:
       enabled: false
+  sql:
+    init:
+      mode: always
+  jpa:
+    defer-datasource-initialization: true
 
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
+
+backup:
+  mysql:
+    clientBinDir: C:/Program Files/MySQL/MySQL Server 8.4/bin
+    host: 127.0.0.1
+    port: 3306
+    database: hiveqqa
+    user: root
+    password: mysqlpassword
+    lockTables: false
+  runtime:
+    workDir: work/db-backup
+    tempDir: tmp/db-backup
+  handoff:
+    waitForAck: false
+  restore:
+    dropAndRecreateBeforeImport: true
+    tempDir: tmp/db-restore

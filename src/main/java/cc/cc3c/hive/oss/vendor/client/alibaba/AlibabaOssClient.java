@@ -34,6 +34,11 @@ public class AlibabaOssClient implements HiveOssClient {
     @Autowired
     public AlibabaOssClient(AlibabaOssConfig config) {
         ClientConfiguration conf = new ClientConfiguration();
+        conf.setProxyHost("139.224.202.103");
+        conf.setProxyPort(13128);
+        conf.setProxyUsername("yliang");
+        conf.setProxyPassword("RN@yUUyuTV7T8a");
+
         ossClient = new OSSClient(config.getEndPoint(), config.getAccessKeyId(), config.getAccessKeySecret(), conf);
     }
 
@@ -147,7 +152,11 @@ public class AlibabaOssClient implements HiveOssClient {
         String nextMarker = null;
 
         do {
-            objectListing = ossClient.listObjects(new ListObjectsRequest(task.getBucket()).withMarker(nextMarker));
+            ListObjectsRequest listRequest = new ListObjectsRequest(task.getBucket()).withMarker(nextMarker);
+            if (task.getKey() != null && !task.getKey().isEmpty()) {
+                listRequest.withPrefix(task.getKey());
+            }
+            objectListing = ossClient.listObjects(listRequest);
 
             for (OSSObjectSummary summary : objectListing.getObjectSummaries()) {
                 HiveOssObject hiveOssObject = new HiveOssObject();
