@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Provides backup list and ack data from OSS only. Status is UPLOADED when both
@@ -28,6 +27,7 @@ public class DbBackupQueryService {
 
     private final HiveOssService hiveOssService;
     private final DbBackupManifestService manifestService;
+    private final DbRestoreStatusTracker restoreStatusTracker;
 
     /**
      * Returns ack VO for the given batchId. When archive and manifest both exist in OSS, status is UPLOADED;
@@ -36,6 +36,10 @@ public class DbBackupQueryService {
     public Optional<DbBackupAckVO> getByBatchId(String batchId) {
         if (batchId == null || batchId.isBlank()) {
             return Optional.empty();
+        }
+        Optional<DbBackupAckVO> restoreAck = restoreStatusTracker.find(batchId);
+        if (restoreAck.isPresent()) {
+            return restoreAck;
         }
         HiveOss oss = hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD);
 

@@ -5,11 +5,6 @@ spring:
   servlet:
     multipart:
       enabled: false
-  sql:
-    init:
-      mode: always
-  jpa:
-    defer-datasource-initialization: true
 
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\

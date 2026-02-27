@@ -35,6 +35,7 @@ public class DbBackupOrchestrationService {
     private final HiveOssService hiveOssService;
     private final DbBackupManifestService manifestService;
     private final DbBackupChecksumVerifier checksumVerifier;
+    private final DbRestoreStatusTracker restoreStatusTracker;
 
     public String startBackup() {
         String database = backupProperties.getMysql().getDatabase();
@@ -102,6 +103,7 @@ public class DbBackupOrchestrationService {
         if (!oss.doesObjectExist(task)) {
             throw new IllegalArgumentException("manifest not found for batch: " + batchId);
         }
+        restoreStatusTracker.markPending(batchId, "restore task accepted");
         CompletableFuture.runAsync(() -> runRestoreAsync(batchId), Executors.newCachedThreadPool());
     }
 
@@ -157,8 +159,10 @@ public class DbBackupOrchestrationService {
                 throw new RuntimeException("mysql import exit code: " + result.mysqlExitCode());
             }
             log.info("Restore completed for batchId={}", batchId);
+            restoreStatusTracker.markRestored(batchId, "restore completed");
         } catch (Exception e) {
             log.error("Restore failed for batchId={}", batchId, e);
+            restoreStatusTracker.markFailed(batchId, e.getMessage() == null ? "restore failed" : e.getMessage());
         } finally {
             if (archivePath != null && Files.exists(archivePath)) {
                 try {
