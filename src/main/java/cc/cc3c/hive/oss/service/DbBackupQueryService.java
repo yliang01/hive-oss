@@ -1,9 +1,10 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.oss.controller.vo.DbBackupAckVO;
 import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
 import cc.cc3c.hive.oss.vendor.HiveOss;
+import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class DbBackupQueryService {
     private final HiveOssService hiveOssService;
     private final DbBackupManifestService manifestService;
     private final DbRestoreStatusTracker restoreStatusTracker;
+    private final AlibabaOssConfig alibabaOssConfig;
 
     /**
      * Returns ack VO for the given batchId. When archive and manifest both exist in OSS, status is UPLOADED;
@@ -41,12 +43,12 @@ public class DbBackupQueryService {
         if (restoreAck.isPresent()) {
             return restoreAck;
         }
-        HiveOss oss = hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD);
+        HiveOss oss = hiveOssService.using(HiveStorageProvider.ALIBABA);
 
         String manifestKey = manifestService.manifestKey(batchId);
 
         HiveOssTask manifestTask = HiveOssTask.createTask()
-                .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                .withBucket(alibabaOssConfig.getBackupBucket())
                 .withKey(manifestKey);
         if (!oss.doesObjectExist(manifestTask)) {
             return Optional.of(pendingAck(batchId));
@@ -55,7 +57,7 @@ public class DbBackupQueryService {
         Instant ackTime = null;
         try {
             HiveOssTask listTask = HiveOssTask.createTask()
-                    .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                    .withBucket(alibabaOssConfig.getBackupBucket())
                     .withKey(manifestKey);
             List<HiveOssObject> list = oss.listObjects(listTask);
             Optional<HiveOssObject> archiveObj = list.stream()
@@ -90,11 +92,11 @@ public class DbBackupQueryService {
      * Only entries with both archive and manifest present are included; status is always UPLOADED.
      */
     public DbBackupListVO listBackups() {
-        HiveOss oss = hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD);
+        HiveOss oss = hiveOssService.using(HiveStorageProvider.ALIBABA);
         List<DbBackupListVO.DbBackupItemVO> items = new ArrayList<>();
         try {
             HiveOssTask listTask = HiveOssTask.createTask()
-                    .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                    .withBucket(alibabaOssConfig.getBackupBucket())
                     .withKey(DbBackupManifestService.DB_BACKUP_KEY_PREFIX);
             List<HiveOssObject> objects = oss.listObjects(listTask);
 

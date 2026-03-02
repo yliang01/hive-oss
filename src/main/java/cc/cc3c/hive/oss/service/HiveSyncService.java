@@ -1,7 +1,9 @@
 package cc.cc3c.hive.oss.service;
 
+import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.HiveRecord;
-import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.CategoryStorageClass;
+import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveSyncVO;
@@ -17,8 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static cc.cc3c.hive.domain.model.HiveRecordSource.ALIBABA_ACHIEVE;
-
 @Slf4j
 @Service
 public class HiveSyncService {
@@ -32,11 +32,16 @@ public class HiveSyncService {
         this.hiveRecordRepository = hiveRecordRepository;
     }
 
-    public HiveSyncVO syncRemote(HiveRecordSource source) throws Exception {
-        HiveOssTask task = HiveOssTask.createTask().withBucket(source);
-        Map<String, HiveOssObject> objectMap = hiveOssService.using(source).listObjects(task).stream().collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
+    public HiveSyncVO syncRemote(FileCategoryEntity category) throws Exception {
+        String bucketName = category.getBucketName();
+        HiveOssTask task = HiveOssTask.createTask().withBucket(bucketName);
+        Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
+                .listObjects(task)
+                .stream()
+                .filter(object -> !isBackupManagedObject(object.getFileKey()))
+                .collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
 
-        List<HiveRecord> recordList = hiveRecordRepository.findBySourceAndDeletedIsFalse(source);
+        List<HiveRecord> recordList = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(bucketName);
         Map<String, HiveRecord> recordMap = recordList.stream().collect(Collectors.toMap(HiveRecord::getFileKey, v -> v));
 
         int ossOnly = 0;
@@ -48,7 +53,9 @@ public class HiveSyncService {
             HiveRecord hiveRecord = recordMap.get(fileKey);
             if (hiveRecord != null) {
                 if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
-                    hiveRecord.setSource(source);
+                    hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
+                    hiveRecord.setBucketName(bucketName);
+                    hiveRecord.setStorageClassCache(parseStorageClass(hiveOssObject.getStorageClass(), category.getStorageClass()));
                     hiveRecord.setSize(hiveOssObject.getSize());
                     hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                     hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
@@ -63,7 +70,9 @@ public class HiveSyncService {
                 hiveRecord.setFileName("");
                 hiveRecord.setFileKey(fileKey);
                 hiveRecord.setZipped(false);
-                hiveRecord.setSource(source);
+                hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
+                hiveRecord.setBucketName(bucketName);
+                hiveRecord.setStorageClassCache(parseStorageClass(hiveOssObject.getStorageClass(), category.getStorageClass()));
                 hiveRecord.setSize(hiveOssObject.getSize());
                 hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                 hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);
@@ -71,7 +80,7 @@ public class HiveSyncService {
                 ossOnly++;
             }
             hiveRecord.setLastSyncTime(LocalDateTime.now());
-            if (ALIBABA_ACHIEVE.equals(source)) {
+            if (isArchiveStorageClass(hiveRecord.getStorageClassCache())) {
                 Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
                 hiveRecord.setDeletable(duration.toDays() > 61);
             } else {
@@ -97,5 +106,24 @@ public class HiveSyncService {
                 .ossToDbMatched(ossToDbMatched)
                 .ossToDbMismatched(ossToDbMismatched)
                 .dbToOssMismatched(dbToOssMismatched).build();
+    }
+
+    private boolean isBackupManagedObject(String fileKey) {
+        return fileKey != null && fileKey.startsWith(DbBackupManifestService.DB_BACKUP_KEY_PREFIX);
+    }
+
+    private CategoryStorageClass parseStorageClass(String storageClass, CategoryStorageClass fallback) {
+        if (storageClass == null || storageClass.isBlank()) {
+            return fallback == null ? CategoryStorageClass.STANDARD : fallback;
+        }
+        String normalized = storageClass.trim().toUpperCase();
+        if (normalized.contains(CategoryStorageClass.ARCHIVE.name())) {
+            return CategoryStorageClass.ARCHIVE;
+        }
+        return CategoryStorageClass.STANDARD;
+    }
+
+    private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
+        return storageClass == CategoryStorageClass.ARCHIVE;
     }
 }

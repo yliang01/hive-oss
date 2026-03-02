@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -44,7 +45,14 @@ public class AlibabaOssClient implements HiveOssClient {
 
     @Override
     public String initiateMultipartUpload(HiveOssTask task) {
-        return ossClient.initiateMultipartUpload(new InitiateMultipartUploadRequest(task.getBucket(), task.getKey())).getUploadId();
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(task.getBucket(), task.getKey());
+        ObjectMetadata objectMetadata = new ObjectMetadata();
+        StorageClass storageClass = resolveStorageClass(task.getStorageClass());
+        if (storageClass != null) {
+            objectMetadata.setHeader(OSSHeaders.STORAGE_CLASS, storageClass.toString());
+            request.setObjectMetadata(objectMetadata);
+        }
+        return ossClient.initiateMultipartUpload(request).getUploadId();
     }
 
     @Override
@@ -128,7 +136,14 @@ public class AlibabaOssClient implements HiveOssClient {
     }
 
     public void putObject(HiveOssTask task) {
-        ossClient.putObject(task.getBucket(), task.getKey(), task.getInputStream());
+        PutObjectRequest request = new PutObjectRequest(task.getBucket(), task.getKey(), task.getInputStream());
+        StorageClass storageClass = resolveStorageClass(task.getStorageClass());
+        if (storageClass != null) {
+            ObjectMetadata objectMetadata = new ObjectMetadata();
+            objectMetadata.setHeader(OSSHeaders.STORAGE_CLASS, storageClass.toString());
+            request.setMetadata(objectMetadata);
+        }
+        ossClient.putObject(request);
     }
 
     @Override
@@ -177,5 +192,16 @@ public class AlibabaOssClient implements HiveOssClient {
     @Override
     public void deleteObject(HiveOssTask task) {
         ossClient.deleteObject(task.getBucket(), task.getKey());
+    }
+
+    private StorageClass resolveStorageClass(String storageClass) {
+        if (storageClass == null || storageClass.isBlank()) {
+            return null;
+        }
+        try {
+            return StorageClass.valueOf(storageClass.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

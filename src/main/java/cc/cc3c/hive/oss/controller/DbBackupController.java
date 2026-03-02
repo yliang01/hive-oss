@@ -58,4 +58,24 @@ public class DbBackupController {
                     .build());
         }
     }
+
+    @DeleteMapping("/{batchId}")
+    public ResponseEntity<DbBackupAckVO> deleteBackup(@PathVariable("batchId") String batchId) {
+        try {
+            orchestrationService.deleteBackup(batchId);
+            return ResponseEntity.ok(DbBackupAckVO.builder()
+                    .batchId(batchId)
+                    .status("DELETED")
+                    .message("backup deleted")
+                    .build());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(DbBackupAckVO.builder()
+                    .batchId(batchId)
+                    .status("FAILED")
+                    .message(e.getMessage())
+                    .build());
+        }
+    }
 }

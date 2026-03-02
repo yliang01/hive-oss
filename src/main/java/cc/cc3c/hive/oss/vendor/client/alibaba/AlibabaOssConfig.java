@@ -19,7 +19,5 @@ public class AlibabaOssConfig {
     @NotBlank
     private String endPoint;
     @NotBlank
-    private String standardBucket;
-    @NotBlank
-    private String archiveBucket;
+    private String backupBucket;
 }

@@ -1,0 +1,6 @@
+-- Deprecated single-file script.
+-- Please use the new SQL pack instead:
+-- 1) 001_category_group_schema.sql
+-- 2) 002_category_seed.sql
+-- 3) 003_index_and_constraints.sql
+-- 4) 004_safe_cleanup.sql

@@ -1,6 +1,6 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.oss.vendor.HiveOss;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,12 +16,18 @@ public class HiveOssService {
     @Qualifier("tencentOss")
     private HiveOss tencentOss;
 
-    public HiveOss using(HiveRecordSource source) {
-        switch (source) {
-            case ALIBABA_ACHIEVE, ALIBABA_STANDARD -> {
+    public HiveOss using(HiveStorageProvider provider) {
+        if (provider == null) {
+            return alibabaOss;
+        }
+        switch (provider) {
+            case ALIBABA -> {
                 return alibabaOss;
             }
+            case TENCENT -> {
+                return tencentOss;
+            }
+            default -> throw new IllegalArgumentException("unsupported provider: " + provider);
         }
-        return null;
     }
 }

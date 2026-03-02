@@ -19,11 +19,11 @@ public class HiveSyncMonitor {
     public void onApplicationReadyEvent() {
         try {
             FileAlterationMonitor uploadMonitor = new FileAlterationMonitor();
-            FileAlterationObserver alibabaStandardObserver = new FileAlterationObserver(hiveUploader.getAlibabaStandardFolder(), (file) -> {
+            FileAlterationObserver alibabaStandardObserver = new FileAlterationObserver(hiveUploader.getLegacyStandardFolder(), (file) -> {
                 return !file.getName().endsWith(".hive");
             });
             alibabaStandardObserver.addListener(hiveUploader);
-            FileAlterationObserver alibabaAchieveObserver = new FileAlterationObserver(hiveUploader.getAlibabaAchieveFolder(), (file) -> {
+            FileAlterationObserver alibabaAchieveObserver = new FileAlterationObserver(hiveUploader.getLegacyArchiveFolder(), (file) -> {
                 return !file.getName().endsWith(".hive");
             });
             alibabaAchieveObserver.addListener(hiveUploader);

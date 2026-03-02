@@ -9,6 +9,8 @@ spring:
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
+  preview:
+    max-size-bytes: 10485760
 
 backup:
   mysql:

@@ -1,0 +1,40 @@
+-- 001_category_group_schema.sql
+-- Create category/group tables and required columns.
+
+CREATE TABLE IF NOT EXISTS file_category (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  code VARCHAR(32) NOT NULL COMMENT 'stable API path key, upper snake case',
+  name VARCHAR(64) NOT NULL,
+  description VARCHAR(255) NULL,
+  bucket_name VARCHAR(128) NOT NULL COMMENT 'category to bucket binding (1:1)',
+  storage_class VARCHAR(16) NOT NULL DEFAULT 'STANDARD' COMMENT 'STANDARD|ARCHIVE',
+  preview_policy VARCHAR(32) NOT NULL DEFAULT 'DEFAULT',
+  ui_variant VARCHAR(32) NOT NULL DEFAULT 'hot',
+  is_system TINYINT(1) NOT NULL DEFAULT 0,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS file_group (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  category_id BIGINT NOT NULL,
+  group_code VARCHAR(64) NOT NULL,
+  group_name VARCHAR(128) NOT NULL,
+  group_desc VARCHAR(255) NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_group_category FOREIGN KEY (category_id) REFERENCES file_category(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS file_group_record (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  group_id BIGINT NOT NULL,
+  hive_record_id INT NOT NULL,
+  assigned_by VARCHAR(64) NULL,
+  assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_fgr_group FOREIGN KEY (group_id) REFERENCES file_group(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

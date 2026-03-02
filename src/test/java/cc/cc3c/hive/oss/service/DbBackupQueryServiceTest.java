@@ -1,6 +1,6 @@
 //package cc.cc3c.hive.oss.service;
 //
-//import cc.cc3c.hive.domain.model.HiveRecordSource;
+//import cc.cc3c.hive.domain.model.HiveStorageProvider;
 //import cc.cc3c.hive.oss.controller.vo.DbBackupAckVO;
 //import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
 //import cc.cc3c.hive.oss.vendor.HiveOss;
@@ -35,7 +35,7 @@
 //    @Before
 //    public void setUp() {
 //        service = new DbBackupQueryService(hiveOssService, manifestService);
-//        when(hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD)).thenReturn(oss);
+//        when(hiveOssService.using(HiveStorageProvider.ALIBABA)).thenReturn(oss);
 //    }
 //
 //    @Test

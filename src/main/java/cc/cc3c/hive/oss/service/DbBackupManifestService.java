@@ -1,6 +1,5 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.model.HiveRecordSource;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import org.springframework.stereotype.Service;
@@ -32,9 +31,9 @@ public class DbBackupManifestService {
         return manifests;
     }
 
-    public List<HiveOssObject> listManifestObjectsFromOss(cc.cc3c.hive.oss.vendor.HiveOss oss) throws Exception {
+    public List<HiveOssObject> listManifestObjectsFromOss(cc.cc3c.hive.oss.vendor.HiveOss oss, String backupBucket) throws Exception {
         HiveOssTask listTask = HiveOssTask.createTask()
-                .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                .withBucket(backupBucket)
                 .withKey(DB_BACKUP_KEY_PREFIX);
         return listManifestObjects(oss.listObjects(listTask));
     }

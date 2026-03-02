@@ -1,6 +1,5 @@
 package cc.cc3c.hive.oss.vendor.vo;
 
-import cc.cc3c.hive.domain.model.HiveRecordSource;
 import cc.cc3c.hive.encryption.HiveEncryption;
 import cc.cc3c.hive.encryption.HiveEncryptionConfig;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
@@ -8,6 +7,7 @@ import cc.cc3c.hive.oss.vendor.client.tencent.TencentOssConfig;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
@@ -30,6 +30,9 @@ public class HiveOssTask {
     @Getter
     @ToString.Include
     private String key;
+    @Getter
+    @Setter
+    private String storageClass;
 
     private InputStream inputStream;
     private OutputStream outputStream;
@@ -54,14 +57,11 @@ public class HiveOssTask {
         return encryption != null;
     }
 
-    public HiveOssTask withBucket(HiveRecordSource source) {
-        if (source == HiveRecordSource.ALIBABA_ACHIEVE) {
-            this.bucket = alibabaOssConfig.getArchiveBucket();
-        } else if (source == HiveRecordSource.ALIBABA_STANDARD) {
-            this.bucket = alibabaOssConfig.getStandardBucket();
-        } else {
-            throw new IllegalArgumentException("bad record source");
+    public HiveOssTask withBucket(String bucket) {
+        if (StringUtils.isBlank(bucket)) {
+            throw new IllegalArgumentException("bucket is required");
         }
+        this.bucket = bucket.trim();
         return this;
     }
 
@@ -77,6 +77,11 @@ public class HiveOssTask {
 
     public HiveOssTask withInputStream(InputStream inputStream) {
         this.inputStream = inputStream;
+        return this;
+    }
+
+    public HiveOssTask withStorageClass(String storageClass) {
+        this.storageClass = storageClass;
         return this;
     }
 

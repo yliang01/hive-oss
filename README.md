@@ -65,7 +65,7 @@ flowchart LR
 
 ## 外部依赖（高层）
 
-- **hive-domain**：实体 `HiveRecord`、枚举 `HiveRecordSource`/`HiveRecordStatus`/`HiveDownloadStatus`、仓储 `HiveRecordRepository`
+- **hive-domain**：实体 `HiveRecord`、枚举 `HiveStorageProvider`/`HiveRecordStatus`/`HiveDownloadStatus`、仓储 `HiveRecordRepository`
 - **hive-encryption-starter**：加密配置与加解密能力（上传/下载时可选）
 - **mysql-backup-spring-boot-starter**（db2oss）：通过 AutoConfiguration 提供 `BackupProperties`、`BackupService`、`RestoreService`，以 `backup.*` 作为统一配置入口，供 hive-oss 编排调用
 - **Spring Boot**：Web、Validation、JPA、配置

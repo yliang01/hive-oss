@@ -1,7 +1,8 @@
 package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
-import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.CategoryStorageClass;
+import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
@@ -24,19 +25,24 @@ import java.io.InputStream;
 @Component
 public class HiveUploadService implements FileAlterationListener {
 
+    private static final String LEGACY_ARCHIVE_FOLDER_NAME = "ALIBABA_ACHIEVE";
     private final HiveRecordRepository hiveRecordRepository;
 
     private final HiveOssService hiveOssService;
+    private final FileCategoryResolver fileCategoryResolver;
 
-    public HiveUploadService(HiveRecordRepository hiveRecordRepository, HiveOssService hiveOssService) {
+    public HiveUploadService(HiveRecordRepository hiveRecordRepository,
+                             HiveOssService hiveOssService,
+                             FileCategoryResolver fileCategoryResolver) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.hiveOssService = hiveOssService;
+        this.fileCategoryResolver = fileCategoryResolver;
     }
 
     @Getter
-    private File alibabaStandardFolder;
+    private File legacyStandardFolder;
     @Getter
-    private File alibabaAchieveFolder;
+    private File legacyArchiveFolder;
 
     private String uploadDir;
 
@@ -47,11 +53,12 @@ public class HiveUploadService implements FileAlterationListener {
 
     @PostConstruct
     public void init() {
-        alibabaStandardFolder = new File(uploadDir + HiveRecordSource.ALIBABA_STANDARD);
-        alibabaAchieveFolder = new File(uploadDir + HiveRecordSource.ALIBABA_ACHIEVE);
+        // Legacy compatibility: watcher still consumes the historical folder names.
+        legacyStandardFolder = new File(uploadDir + "ALIBABA_STANDARD");
+        legacyArchiveFolder = new File(uploadDir + LEGACY_ARCHIVE_FOLDER_NAME);
         try {
-            FileUtils.forceMkdir(alibabaStandardFolder);
-            FileUtils.forceMkdir(alibabaAchieveFolder);
+            FileUtils.forceMkdir(legacyStandardFolder);
+            FileUtils.forceMkdir(legacyArchiveFolder);
         } catch (IOException e) {
             log.error("fail to create upload folder", e);
             System.exit(1);
@@ -82,30 +89,28 @@ public class HiveUploadService implements FileAlterationListener {
         try {
             String fileName = file.getName();
             String fileKey = DigestUtils.md5Hex(file.getName());
-            HiveOssTask task;
-            HiveRecordSource source;
-            if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_STANDARD.name())) {
-                source = HiveRecordSource.ALIBABA_STANDARD;
-            } else if (file.getCanonicalPath().contains(HiveRecordSource.ALIBABA_ACHIEVE.name())) {
-                source = HiveRecordSource.ALIBABA_ACHIEVE;
-            } else {
-                log.error("unknown source");
-                return;
-            }
-            task = HiveOssTask.createTask()
-                    .withBucket(source)
+            CategoryStorageClass storageClass = file.getCanonicalPath().contains(LEGACY_ARCHIVE_FOLDER_NAME)
+                    ? CategoryStorageClass.ARCHIVE
+                    : CategoryStorageClass.STANDARD;
+            log.warn("legacy watcher folder semantics in use; path={}, inferredStorageClass={}", file.getCanonicalPath(), storageClass);
+            String bucketName = fileCategoryResolver.resolveDefaultCategoryByStorageClass(storageClass).getBucketName();
+            HiveOssTask task = HiveOssTask.createTask()
+                    .withBucket(bucketName)
                     .withKey(fileKey)
                     .withInputStream(new FileInputStream(file))
+                    .withStorageClass(storageClass.name())
                     .withEncryption(fileName);
             HiveRecord hiveRecord = new HiveRecord();
             hiveRecord.setFileName(fileName);
             hiveRecord.setFileKey(fileKey);
             hiveRecord.setZipped(false);
-            hiveRecord.setSource(source);
+            hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
+            hiveRecord.setBucketName(task.getBucket());
+            hiveRecord.setStorageClassCache(storageClass);
             hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
             hiveRecordRepository.save(hiveRecord);
 
-            hiveOssService.using(source).upload(task);
+            hiveOssService.using(hiveRecord.getProvider()).upload(task);
 
             hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
             hiveRecordRepository.save(hiveRecord);
@@ -130,22 +135,25 @@ public class HiveUploadService implements FileAlterationListener {
 
     }
 
-    public String uploadSync(HiveRecordSource source, String fileName, InputStream inputStream) throws Exception {
+    public String uploadSync(String bucketName, CategoryStorageClass storageClass, String fileName, InputStream inputStream) throws Exception {
         String fileKey = DigestUtils.md5Hex(fileName);
         HiveOssTask task = HiveOssTask.createTask()
-                .withBucket(source)
+                .withBucket(bucketName)
                 .withKey(fileKey)
                 .withInputStream(inputStream)
+                .withStorageClass(storageClass == null ? CategoryStorageClass.STANDARD.name() : storageClass.name())
                 .withEncryption(fileName);
         HiveRecord hiveRecord = new HiveRecord();
         hiveRecord.setFileName(fileName);
         hiveRecord.setFileKey(fileKey);
         hiveRecord.setZipped(false);
-        hiveRecord.setSource(source);
+        hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
+        hiveRecord.setBucketName(bucketName);
+        hiveRecord.setStorageClassCache(storageClass == null ? CategoryStorageClass.STANDARD : storageClass);
         hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
         hiveRecordRepository.save(hiveRecord);
 
-        hiveOssService.using(source).uploadSync(task);
+        hiveOssService.using(hiveRecord.getProvider()).uploadSync(task);
 
         hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
         hiveRecordRepository.save(hiveRecord);

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -60,20 +61,14 @@ public class HiveDownloadService {
         if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()) {
             return;
         }
-        HiveOssTask task = HiveOssTask.createTask()
-                .withBucket(hiveRecord.getSource())
-                .withKey(hiveRecord.getFileKey())
-                .withOutputStream(new FileOutputStream(getDownloadFile(hiveRecord)));
-        if (!HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
-            task = task.withEncryption(hiveRecord.getFileName());
-        }
+        HiveOssTask task = createOutputTask(hiveRecord, new FileOutputStream(getDownloadFile(hiveRecord)));
         log.info("download start {}", task);
         hiveRecordRepository.updateDownloadStatus(task.getKey(), HiveDownloadStatus.downloading);
         downloadTasks.put(task.getKey(), task);
         HiveOssTask finalTask = task;
         Thread.ofVirtual().start(() -> {
             try {
-                hiveOssService.using(hiveRecord.getSource()).download(finalTask);
+                hiveOssService.using(hiveRecord.getProvider()).download(finalTask);
                 hiveRecordRepository.updateDownloadStatus(finalTask.getKey(), HiveDownloadStatus.success);
                 log.info("download finished {}", finalTask);
             } catch (Exception e) {
@@ -83,6 +78,22 @@ public class HiveDownloadService {
                 downloadTasks.remove(finalTask.getKey());
             }
         });
+    }
+
+    public void streamPreview(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
+        HiveOssTask task = createOutputTask(hiveRecord, outputStream);
+        hiveOssService.using(hiveRecord.getProvider()).download(task);
+    }
+
+    private HiveOssTask createOutputTask(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
+        HiveOssTask task = HiveOssTask.createTask()
+                .withBucket(hiveRecord.getBucketName())
+                .withKey(hiveRecord.getFileKey())
+                .withOutputStream(outputStream);
+        if (!HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
+            task = task.withEncryption(hiveRecord.getFileName());
+        }
+        return task;
     }
 
     public File getDownloadFile(HiveRecord hiveRecord) {

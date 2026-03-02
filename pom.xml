@@ -73,6 +73,11 @@
         </dependency>
         <dependency>
             <groupId>com.example</groupId>
+            <artifactId>mysql-backup-core</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.example</groupId>
             <artifactId>mysql-backup-spring-boot-starter</artifactId>
             <version>1.0.0</version>
         </dependency>

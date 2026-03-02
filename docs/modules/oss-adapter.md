@@ -6,7 +6,7 @@
 
 ## 启动 / 触发入口
 
-- **被动加载**：通过 `HiveOssConfiguration`（`@Configuration`）在应用启动时注册 `HiveOss` Bean（`alibabaOss`、`tencentOss`）及静态任务配置；无独立 main，由服务层通过 `HiveOssService.using(source)` 按需调用。
+- **被动加载**：通过 `HiveOssConfiguration`（`@Configuration`）在应用启动时注册 `HiveOss` Bean（`alibabaOss`、`tencentOss`）及静态任务配置；无独立 main，由服务层通过 `HiveOssService` 按需调用。
 
 ## 关键依赖
 
@@ -27,11 +27,11 @@
 | `HiveOssClient` | 厂商抽象：分片上传生命周期、putObject、getObject、listObject、delete、restore/restoreCheck 等 |
 | `AlibabaOssClient` | 阿里云 OSS 实现（含归档解冻与状态解析） |
 | `TencentOssClient` | 腾讯云 COS 实现（restore 相关可为未实现或占位） |
-| `HiveOssTask` | 任务模型：bucket/key、流、加密、分片上传进度与 uploadedMap；根据 `HiveRecordSource` 与静态配置解析实际 bucket 名 |
+| `HiveOssTask` | 任务模型：bucket/key、storageClass、流、加密、分片上传进度与 uploadedMap；bucket 必须由调用方显式传入 |
 
 ## 关键配置项
 
-- `hive.oss.alibaba.*`：阿里云 endpoint、accessKey、standardBucket、archiveBucket 等（见 `AlibabaOssConfig`）。
+- `hive.oss.alibaba.*`：阿里云 endpoint、accessKey、backupBucket（DB 备份专用，见 `AlibabaOssConfig`）。
 - `hive.oss.tencent.*`：腾讯云 secretId、secretKey、region、bucket（见 `TencentOssConfig`）。
 - `hive.oss.part.size`：分片大小（MB）。
 - `hive.oss.concurrency`：并发度（读/传分片）。

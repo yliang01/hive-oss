@@ -12,7 +12,7 @@
 ## 关键依赖
 
 - **内部**：`HiveOssService`、`HiveUploadService`、`HiveDownloadService`、`HiveSyncService`、`HiveRecordRepository`；VO 位于 `cc.cc3c.hive.oss.controller.vo`（如 `HiveRecordVO`、`HiveRecordsVO`、`HiveUploadVO`、`HiveSyncVO`、`HiveDownloadStatusVO`）。
-- **外部**：`hive-domain`（`HiveRecord`、`HiveRecordSource`、`HiveRecordStatus`、`HiveDownloadStatus`、`HiveRecordRepository`）；Spring Web、Validation、Commons FileUpload2（multipart 上传）。
+- **外部**：`hive-domain`（`HiveRecord`、`HiveStorageProvider`、`HiveRecordStatus`、`HiveDownloadStatus`、`HiveRecordRepository`）；Spring Web、Validation、Commons FileUpload2（multipart 上传）。
 
 ## 上下游关系
 
@@ -23,21 +23,27 @@
 
 | 能力 | 方法 | 路径（示例） |
 |------|------|----------------|
-| Bucket 列表 | GET | `/buckets` |
-| 文件列表 | GET | `/buckets/{bucket}/files` |
-| 文件搜索 | GET | `/buckets/{bucket}/files/search` |
-| 单文件信息 | GET | `/buckets/{bucket}/files/{fileKey}` |
-| 删除文件 | DELETE | `/buckets/{bucket}/files/{fileKey}` |
-| 解冻 | POST | `/buckets/{bucket}/files/unfreeze/{fileKey}` |
-| 解冻状态 | GET | `/buckets/{bucket}/files/unfreeze-status/{fileKey}` |
-| 创建下载任务 | POST | `/buckets/{bucket}/files/download-task/{fileKey}` |
-| 下载任务状态 | GET | `/buckets/{bucket}/files/download-task-status/{fileKey}` |
-| 释放本地文件 | POST | `/buckets/{bucket}/files/release-local/{fileKey}` |
-| 确认删除 | POST | `/files/confirm-delete/{bucket}` |
-| 远程同步 | POST | `/files/sync-remote/{bucket}` |
-| 上传 | POST | `/buckets/{bucket}/files/upload`（multipart） |
+| 分类列表 | GET | `/categories` |
+| 文件列表（含搜索） | GET | `/categories/{category}/files`（支持可选 `keyword`） |
+| 文件搜索（兼容别名，Deprecated） | GET | `/categories/{category}/files/search` |
+| 单文件信息 | GET | `/categories/{category}/files/{fileKey}` |
+| 删除文件 | DELETE | `/categories/{category}/files/{fileKey}` |
+| 解冻 | POST | `/categories/{category}/files/unfreeze/{fileKey}` |
+| 解冻状态 | GET | `/categories/{category}/files/unfreeze-status/{fileKey}` |
+| 创建下载任务 | POST | `/categories/{category}/files/download-task/{fileKey}` |
+| 下载任务状态 | GET | `/categories/{category}/files/download-task-status/{fileKey}` |
+| 分组分配（主） | POST | `/categories/{category}/groups/{groupId}/files:assign` |
+| 分组迁移（兼容别名，Deprecated） | POST | `/categories/{category}/groups/{groupId}/files:move` |
+| 释放本地文件 | POST | `/categories/{category}/files/release-local/{fileKey}` |
+| 确认删除 | POST | `/categories/{category}/files/confirm-delete` |
+| 远程同步 | POST | `/categories/{category}/files/sync-remote` |
+| 上传 | POST | `/categories/{category}/files/upload`（multipart） |
 
-路径中的 `bucket` 对应 `HiveRecordSource` 枚举名（如 `ALIBABA_STANDARD`、`ALIBABA_ACHIEVE`）。
+路径中的 `category` 映射到 `file_category.code`，再由 category 的 `bucket_name` 决定具体 OSS bucket。
+
+`/categories/{category}/files/search` 兼容期建议保留 2 个发布周期，期间通过响应头 `X-API-Deprecated` 提示调用方迁移到 `/categories/{category}/files?keyword=...`。
+
+`/categories/{category}/files/download-task-status/{fileKey}` 成功态会返回 `downloadUrl`，用于前端自动触发本地下载。
 
 ## 关键配置项
 

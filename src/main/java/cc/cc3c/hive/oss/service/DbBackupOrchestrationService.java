@@ -1,7 +1,9 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.model.HiveRecordSource;
+import cc.cc3c.hive.domain.model.HiveStorageProvider;
+import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
 import cc.cc3c.hive.oss.vendor.HiveOss;
+import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,12 +16,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
@@ -36,6 +41,8 @@ public class DbBackupOrchestrationService {
     private final DbBackupManifestService manifestService;
     private final DbBackupChecksumVerifier checksumVerifier;
     private final DbRestoreStatusTracker restoreStatusTracker;
+    private final DbBackupQueryService dbBackupQueryService;
+    private final AlibabaOssConfig alibabaOssConfig;
 
     public String startBackup() {
         String database = backupProperties.getMysql().getDatabase();
@@ -69,10 +76,11 @@ public class DbBackupOrchestrationService {
 
         log.info("Upload keys resolved from manifest file names, batchId={}", batchId);
 
-        HiveOss oss = hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD);
+        HiveOss oss = hiveOssService.using(HiveStorageProvider.ALIBABA);
+        String backupBucket = alibabaOssConfig.getBackupBucket();
         try (FileInputStream gzipIn = new FileInputStream(gzipFile.toFile())) {
             HiveOssTask task = HiveOssTask.createTask()
-                    .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                    .withBucket(backupBucket)
                     .withKey(archiveKey)
                     .withInputStream(gzipIn)
                     .withEncryption(gzipFileName);
@@ -80,7 +88,7 @@ public class DbBackupOrchestrationService {
         }
         try (FileInputStream checksumIn = new FileInputStream(checksumFile.toFile())) {
             HiveOssTask task = HiveOssTask.createTask()
-                    .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                    .withBucket(backupBucket)
                     .withKey(checksumKey)
                     .withInputStream(checksumIn)
                     .withEncryption(checksumFileName);
@@ -88,7 +96,7 @@ public class DbBackupOrchestrationService {
         }
         try (FileInputStream manifestIn = new FileInputStream(manifestFile.toFile())) {
             HiveOssTask task = HiveOssTask.createTask()
-                    .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                    .withBucket(backupBucket)
                     .withKey(manifestKey)
                     .withInputStream(manifestIn)
                     .withEncryption(manifestFileName);
@@ -97,14 +105,50 @@ public class DbBackupOrchestrationService {
     }
 
     public void startRestore(String batchId) {
-        HiveOss oss = hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD);
+        HiveOss oss = hiveOssService.using(HiveStorageProvider.ALIBABA);
         String manifestKey = manifestService.manifestKey(batchId);
-        HiveOssTask task = HiveOssTask.createTask().withBucket(HiveRecordSource.ALIBABA_STANDARD).withKey(manifestKey);
+        HiveOssTask task = HiveOssTask.createTask().withBucket(alibabaOssConfig.getBackupBucket()).withKey(manifestKey);
         if (!oss.doesObjectExist(task)) {
             throw new IllegalArgumentException("manifest not found for batch: " + batchId);
         }
         restoreStatusTracker.markPending(batchId, "restore task accepted");
         CompletableFuture.runAsync(() -> runRestoreAsync(batchId), Executors.newCachedThreadPool());
+    }
+
+    public void deleteBackup(String batchId) {
+        if (batchId == null || batchId.isBlank()) {
+            throw new IllegalArgumentException("batchId is required");
+        }
+        if (isLatestBackup(batchId)) {
+            throw new IllegalStateException("latest backup cannot be deleted");
+        }
+        HiveOss oss = hiveOssService.using(HiveStorageProvider.ALIBABA);
+        String manifestKey = manifestService.manifestKey(batchId);
+        HiveOssTask manifestTask = HiveOssTask.createTask()
+                .withBucket(alibabaOssConfig.getBackupBucket())
+                .withKey(manifestKey);
+        if (!oss.doesObjectExist(manifestTask)) {
+            throw new IllegalArgumentException("manifest not found for batch: " + batchId);
+        }
+        try (ByteArrayOutputStream manifestOut = new ByteArrayOutputStream()) {
+            HiveOssTask downloadTask = HiveOssTask.createTask()
+                    .withBucket(alibabaOssConfig.getBackupBucket())
+                    .withKey(manifestKey)
+                    .withOutputStream(manifestOut)
+                    .withEncryption(manifestService.manifestFileName(batchId));
+            oss.download(downloadTask);
+            ManifestNames manifestNames = parseManifestNames(manifestOut.toByteArray());
+            String archiveKey = toBackupObjectKey(manifestNames.archiveFile());
+            String checksumKey = toBackupObjectKey(manifestNames.checksumFile());
+            deleteBackupObject(oss, archiveKey);
+            deleteBackupObject(oss, checksumKey);
+            deleteBackupObject(oss, manifestKey);
+            log.info("Backup deleted from OSS, batchId={}", batchId);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to delete backup: " + batchId, e);
+        }
     }
 
     private void runRestoreAsync(String batchId) {
@@ -117,11 +161,11 @@ public class DbBackupOrchestrationService {
             manifestPath = tempDir.resolve(manifestService.manifestFileName(batchId));
             try (FileOutputStream out = new FileOutputStream(manifestPath.toFile())) {
                 HiveOssTask task = HiveOssTask.createTask()
-                        .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                        .withBucket(alibabaOssConfig.getBackupBucket())
                         .withKey(manifestService.manifestKey(batchId))
                         .withOutputStream(out)
                         .withEncryption(manifestService.manifestFileName(batchId));
-                hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD).download(task);
+                hiveOssService.using(HiveStorageProvider.ALIBABA).download(task);
             }
 
             ManifestNames manifestNames = parseManifestNames(manifestPath);
@@ -136,20 +180,20 @@ public class DbBackupOrchestrationService {
 
             try (FileOutputStream out = new FileOutputStream(archivePath.toFile())) {
                 HiveOssTask task = HiveOssTask.createTask()
-                        .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                        .withBucket(alibabaOssConfig.getBackupBucket())
                         .withKey(archiveKey)
                         .withOutputStream(out)
                         .withEncryption(archiveFileName);
-                hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD).download(task);
+                hiveOssService.using(HiveStorageProvider.ALIBABA).download(task);
             }
 
             try (FileOutputStream out = new FileOutputStream(checksumPath.toFile())) {
                 HiveOssTask task = HiveOssTask.createTask()
-                        .withBucket(HiveRecordSource.ALIBABA_STANDARD)
+                        .withBucket(alibabaOssConfig.getBackupBucket())
                         .withKey(checksumKey)
                         .withOutputStream(out)
                         .withEncryption(checksumFileName);
-                hiveOssService.using(HiveRecordSource.ALIBABA_STANDARD).download(task);
+                hiveOssService.using(HiveStorageProvider.ALIBABA).download(task);
             }
 
             checksumVerifier.verifySha256(archivePath, checksumPath);
@@ -188,9 +232,34 @@ public class DbBackupOrchestrationService {
 
     private ManifestNames parseManifestNames(Path manifestPath) throws Exception {
         JsonNode root = OBJECT_MAPPER.readTree(manifestPath.toFile());
+        return parseManifestNames(root);
+    }
+
+    private ManifestNames parseManifestNames(byte[] manifestContent) throws Exception {
+        JsonNode root = OBJECT_MAPPER.readTree(manifestContent);
+        return parseManifestNames(root);
+    }
+
+    private ManifestNames parseManifestNames(JsonNode root) {
         String archiveFile = textValue(root, "archiveFile");
         String checksumFile = textValue(root, "checksumFile");
         return new ManifestNames(archiveFile, checksumFile);
+    }
+
+    private boolean isLatestBackup(String batchId) {
+        List<DbBackupListVO.DbBackupItemVO> items = dbBackupQueryService.listBackups().getItems();
+        if (items == null || items.isEmpty()) {
+            return false;
+        }
+        String latestBatchId = items.get(0).getBatchId();
+        return Objects.equals(latestBatchId, batchId);
+    }
+
+    private void deleteBackupObject(HiveOss oss, String key) throws Exception {
+        HiveOssTask deleteTask = HiveOssTask.createTask()
+                .withBucket(alibabaOssConfig.getBackupBucket())
+                .withKey(key);
+        oss.delete(deleteTask);
     }
 
     private String textValue(JsonNode root, String fieldName) {
