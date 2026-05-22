@@ -6,12 +6,12 @@
 
 ## 启动 / 触发入口
 
-- **开发态**：在 `hive-oss-frontend/src/main/resources/static` 目录下使用 `npx serve . --config serve.json` 等本地静态服务器；访问入口如 `pages/bucket.html`、`pages/files.html?bucket=xxx`。
-- **运行态**：随 hive-oss Spring Boot 应用启动，静态资源来自依赖的 `hive-oss-frontend` JAR（classpath:/static/），由默认资源处理器提供，通过同一端口（如 8080）访问 `/pages/*`、`/js/*`、`/css/*` 等。
+- **开发态**：在 `hive-oss-frontend/frontend-app` 目录下使用 `npm run dev` 启动 Vite；或先构建后在 `hive-oss-frontend/target/generated-resources/static` 目录下使用 `npx serve . --config serve.json`。
+- **运行态**：随 hive-oss Spring Boot 应用启动，静态资源来自依赖的 `hive-oss-frontend` JAR（classpath:/static/），由默认资源处理器提供，通过同一端口（如 8080）访问 `/index.html`、`/pages/*`、`/assets/*` 等。
 
 ## 关键依赖
 
-- **内部**：无；纯静态资源，依赖后端 REST API（见 `static/API.md`）。
+- **内部**：无；纯静态资源，依赖后端 REST API。
 - **外部**：Bootstrap 5.3.2、原生 ES Modules；后端接口基础 URL（如 `http://localhost:8080`）。
 
 ## 上下游关系
@@ -23,15 +23,16 @@
 
 | 路径 | 说明 |
 |------|------|
-| `pages/bucket.html` | Bucket 列表页 |
-| `pages/files.html` | 文件管理页（需 `bucket` 查询参数） |
-| `js/bucket.js` | Bucket 列表逻辑 |
+| `index.html` | 首页 |
+| `pages/files.html` | 文件管理页（需分类查询参数） |
+| `pages/category-admin.html` | 分类与分组管理页 |
+| `js/home.js` | 首页逻辑 |
 | `js/files.js` | 文件管理逻辑 |
+| `js/category-admin.js` | 分类与分组管理逻辑 |
 | `js/utils.js` | 通用工具与 API 请求封装 |
 | `css/style.css` | 样式 |
 | `serve.json` | 本地 serve 配置 |
 | `README.md` | 前端说明与开发命令 |
-| `API.md` | 接口文档（与后端接口一致） |
 
 ## 关键配置项
 
@@ -40,7 +41,8 @@
 ## 相关文件
 
 - **独立模块**：`hive-oss-frontend`（与 `hive-oss` 同级）。
-- **静态资源路径**：`hive-oss-frontend/src/main/resources/static/` 下所有页面、脚本、样式与文档（`pages/`、`js/`、`css/`、`README.md`、`API.md`、`serve.json`）。
+- **源码路径**：`hive-oss-frontend/frontend-app/` 下的页面、脚本、样式与 `public/serve.json`。
+- **构建产物路径**：`hive-oss-frontend/target/generated-resources/static/`，由 Maven 打包进 `hive-oss-frontend` JAR。
 
 ---
 
