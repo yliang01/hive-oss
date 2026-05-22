@@ -40,30 +40,30 @@ public class FileCategoryResolver {
             }
         }
 
-        CategoryStorageClass storageClass = CategoryStorageClass.STANDARD;
-        if (record.getStorageClassCache() == CategoryStorageClass.ARCHIVE) {
-            storageClass = CategoryStorageClass.ARCHIVE;
-        }
-
-        FileCategoryEntity category = fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(storageClass)
+        return fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(CategoryStorageClass.STANDARD)
                 .orElse(null);
-        if (category != null) {
-            return category;
-        }
-        if (storageClass == CategoryStorageClass.ARCHIVE) {
-            return fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(CategoryStorageClass.STANDARD)
-                    .orElse(null);
-        }
-        return null;
     }
 
     public CategoryStorageClass resolveStorageClass(String categoryCode) {
         FileCategoryEntity category = resolveCategory(categoryCode);
-        if (category.getStorageClass() == null) {
+        return normalizeStorageClass(category.getStorageClass());
+    }
+
+    public CategoryStorageClass resolveStorageClassByBucket(String bucketName) {
+        if (StringUtils.isBlank(bucketName)) {
             return CategoryStorageClass.STANDARD;
-        } else {
-            return category.getStorageClass();
         }
+        return fileCategoryRepository.findByBucketNameAndEnabledTrue(bucketName)
+                .map(FileCategoryEntity::getStorageClass)
+                .map(this::normalizeStorageClass)
+                .orElse(CategoryStorageClass.STANDARD);
+    }
+
+    public CategoryStorageClass resolveRecordStorageClass(HiveRecord record) {
+        if (record == null) {
+            return CategoryStorageClass.STANDARD;
+        }
+        return resolveStorageClassByBucket(record.getBucketName());
     }
 
     public FileCategoryEntity resolveDefaultCategoryByStorageClass(CategoryStorageClass storageClass) {
@@ -85,5 +85,9 @@ public class FileCategoryResolver {
             return code;
         }
         return code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private CategoryStorageClass normalizeStorageClass(CategoryStorageClass storageClass) {
+        return storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
     }
 }

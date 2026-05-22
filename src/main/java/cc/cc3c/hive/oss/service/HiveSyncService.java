@@ -55,7 +55,6 @@ public class HiveSyncService {
                 if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
                     hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
                     hiveRecord.setBucketName(bucketName);
-                    hiveRecord.setStorageClassCache(parseStorageClass(hiveOssObject.getStorageClass(), category.getStorageClass()));
                     hiveRecord.setSize(hiveOssObject.getSize());
                     hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                     hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
@@ -72,7 +71,6 @@ public class HiveSyncService {
                 hiveRecord.setZipped(false);
                 hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
                 hiveRecord.setBucketName(bucketName);
-                hiveRecord.setStorageClassCache(parseStorageClass(hiveOssObject.getStorageClass(), category.getStorageClass()));
                 hiveRecord.setSize(hiveOssObject.getSize());
                 hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                 hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);
@@ -80,7 +78,7 @@ public class HiveSyncService {
                 ossOnly++;
             }
             hiveRecord.setLastSyncTime(LocalDateTime.now());
-            if (isArchiveStorageClass(hiveRecord.getStorageClassCache())) {
+            if (isArchiveStorageClass(category.getStorageClass())) {
                 Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
                 hiveRecord.setDeletable(duration.toDays() > 61);
             } else {
@@ -118,17 +116,6 @@ public class HiveSyncService {
     /** Exclude thumbnail objects (e.g. thumb/{fileKey}_w320.jpg) from syncing into hive_record. */
     private boolean isThumbnailObject(String fileKey) {
         return fileKey != null && fileKey.startsWith(THUMB_PREFIX) && fileKey.endsWith(THUMB_SUFFIX);
-    }
-
-    private CategoryStorageClass parseStorageClass(String storageClass, CategoryStorageClass fallback) {
-        if (storageClass == null || storageClass.isBlank()) {
-            return fallback == null ? CategoryStorageClass.STANDARD : fallback;
-        }
-        String normalized = storageClass.trim().toUpperCase();
-        if (normalized.contains(CategoryStorageClass.ARCHIVE.name())) {
-            return CategoryStorageClass.ARCHIVE;
-        }
-        return CategoryStorageClass.STANDARD;
     }
 
     private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {

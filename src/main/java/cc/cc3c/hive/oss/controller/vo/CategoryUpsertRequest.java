@@ -13,5 +13,4 @@ public class CategoryUpsertRequest {
     private String uiVariant;
     private Boolean enabled;
     private Integer sortOrder;
-    private Boolean system;
 }

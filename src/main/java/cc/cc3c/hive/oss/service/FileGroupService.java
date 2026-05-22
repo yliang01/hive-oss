@@ -127,7 +127,6 @@ public class FileGroupService {
         entity.setCode(request.getCode().trim().toUpperCase(Locale.ROOT));
         fillCategory(entity, request);
         entity.setEnabled(request.getEnabled() == null || request.getEnabled());
-        entity.setSystem(Boolean.TRUE.equals(request.getSystem()));
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());
         return toCategoryVO(fileCategoryRepository.save(entity));
@@ -152,12 +151,12 @@ public class FileGroupService {
     @Transactional
     public void deleteCategory(String categoryCode) {
         FileCategoryEntity entity = fileCategoryResolver.resolveCategory(categoryCode);
-        if (Boolean.TRUE.equals(entity.getSystem())) {
-            throw new IllegalArgumentException("system category cannot be deleted");
-        }
         long groupCount = fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).size();
         if (groupCount > 0) {
             throw new IllegalStateException("category still has groups");
+        }
+        if (!hiveRecordRepository.findByBucketNameAndDeletedIsFalse(entity.getBucketName()).isEmpty()) {
+            throw new IllegalStateException("category still has files");
         }
         fileCategoryRepository.delete(entity);
     }
@@ -230,7 +229,6 @@ public class FileGroupService {
                 .uiVariant(category.getUiVariant())
                 .enabled(category.getEnabled())
                 .sortOrder(category.getSortOrder())
-                .system(category.getSystem())
                 .build();
     }
 
@@ -278,11 +276,6 @@ public class FileGroupService {
             entity.setSortOrder(request.getSortOrder());
         } else if (entity.getSortOrder() == null) {
             entity.setSortOrder(0);
-        }
-        if (request.getSystem() != null) {
-            entity.setSystem(request.getSystem());
-        } else if (entity.getSystem() == null) {
-            entity.setSystem(false);
         }
     }
 }

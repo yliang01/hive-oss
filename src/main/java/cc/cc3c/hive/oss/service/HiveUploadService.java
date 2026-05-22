@@ -7,6 +7,7 @@ import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
+import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
@@ -115,7 +116,7 @@ public class HiveUploadService implements FileAlterationListener {
                 FileUtils.deleteQuietly(file);
                 return;
             }
-            hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, storageClass, fileName, fileKey);
+            hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
             try (InputStream fileIn = new FileInputStream(file)) {
                 HiveOssTask task = HiveOssTask.createTask()
                         .withBucket(bucketName)
@@ -173,7 +174,7 @@ public class HiveUploadService implements FileAlterationListener {
             try (InputStream in = inputStream; java.io.FileOutputStream out = new java.io.FileOutputStream(tempFile)) {
                 IOUtils.copy(in, out);
             }
-            hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, resolvedStorageClass, fileName, fileKey);
+            hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
             try (InputStream fileIn = new FileInputStream(tempFile)) {
                 HiveOssTask task = HiveOssTask.createTask()
                         .withBucket(bucketName)
@@ -188,7 +189,7 @@ public class HiveUploadService implements FileAlterationListener {
                 hiveRecordRepository.save(hiveRecord);
                 if (CATEGORY_IMAGE_PREVIEW.equals(StringUtils.trimToEmpty(categoryCode).toUpperCase())
                         && thumbnailGeneratorService.isSupportedImage(fileName)) {
-                    uploadThumbnailAndSaveMeta(hiveRecord, fileKey, tempFile);
+                    uploadThumbnailAndSaveMeta(hiveRecord, fileKey, tempFile, resolvedStorageClass);
                 }
                 return fileKey;
             }
@@ -217,7 +218,7 @@ public class HiveUploadService implements FileAlterationListener {
             IOUtils.closeQuietly(inputStream);
             return fileKey;
         }
-        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, resolvedStorageClass, fileName, fileKey);
+        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
         try {
             HiveOssTask task = HiveOssTask.createTask()
                     .withBucket(bucketName)
@@ -244,7 +245,26 @@ public class HiveUploadService implements FileAlterationListener {
         }
     }
 
-    private HiveRecord startUploadRecord(HiveRecord hiveRecord, String bucketName, CategoryStorageClass storageClass, String fileName, String fileKey) {
+    public HiveUploadCheckVO checkUpload(String bucketName, String fileName) {
+        String fileKey = DigestUtils.md5Hex(fileName);
+        Optional<HiveRecord> existing = hiveRecordRepository.findByBucketNameAndFileKey(bucketName, fileKey);
+        if (existing.isEmpty() || Boolean.TRUE.equals(existing.get().getDeleted())) {
+            return HiveUploadCheckVO.builder()
+                    .exists(false)
+                    .fileKey(fileKey)
+                    .status(null)
+                    .build();
+        }
+
+        HiveRecord record = existing.get();
+        return HiveUploadCheckVO.builder()
+                .exists(HiveRecordStatus.UPLOADED.equals(record.getStatus()))
+                .fileKey(fileKey)
+                .status(record.getStatus())
+                .build();
+    }
+
+    private HiveRecord startUploadRecord(HiveRecord hiveRecord, String bucketName, String fileName, String fileKey) {
         if (hiveRecord.getId() != null
                 && !Boolean.TRUE.equals(hiveRecord.getDeleted())
                 && HiveRecordStatus.UPLOADING.equals(hiveRecord.getStatus())) {
@@ -255,7 +275,6 @@ public class HiveUploadService implements FileAlterationListener {
         hiveRecord.setZipped(false);
         hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
         hiveRecord.setBucketName(bucketName);
-        hiveRecord.setStorageClassCache(resolveStorageClass(storageClass));
         hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
         hiveRecord.setDeleted(false);
         hiveRecord.setDeletable(false);
@@ -277,7 +296,7 @@ public class HiveUploadService implements FileAlterationListener {
      * Generate thumbnail, upload with encryption, and persist thumbKey/thumbStatus/dimensions in hive_record_image_meta.
      * On any failure sets thumbStatus to FAILED and does not throw.
      */
-    private void uploadThumbnailAndSaveMeta(HiveRecord hiveRecord, String fileKey, File imageFile) {
+    private void uploadThumbnailAndSaveMeta(HiveRecord hiveRecord, String fileKey, File imageFile, CategoryStorageClass storageClass) {
         LocalDateTime now = LocalDateTime.now();
         HiveRecordImageMeta meta = HiveRecordImageMeta.builder()
                 .hiveRecordId(hiveRecord.getId())
@@ -301,7 +320,7 @@ public class HiveUploadService implements FileAlterationListener {
                     .withBucket(hiveRecord.getBucketName())
                     .withKey(thumbKey)
                     .withInputStream(new ByteArrayInputStream(thumb.thumbJpeg()))
-                    .withStorageClass(hiveRecord.getStorageClassCache() == null ? CategoryStorageClass.STANDARD.name() : hiveRecord.getStorageClassCache().name())
+                    .withStorageClass(resolveStorageClass(storageClass).name())
                     .withEncryption(thumbFileName);
             hiveOssService.using(hiveRecord.getProvider()).uploadSync(thumbTask);
             meta.setThumbKey(thumbKey);

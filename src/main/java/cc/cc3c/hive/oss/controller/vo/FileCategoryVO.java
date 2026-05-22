@@ -16,5 +16,4 @@ public class FileCategoryVO {
     private String uiVariant;
     private Boolean enabled;
     private Integer sortOrder;
-    private Boolean system;
 }

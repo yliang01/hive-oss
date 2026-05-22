@@ -15,7 +15,6 @@ import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveSyncService;
 import cc.cc3c.hive.oss.service.HiveUploadService;
 import cc.cc3c.hive.oss.service.UploadAlreadyInProgressException;
-import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreStatus;
@@ -260,6 +259,7 @@ public class HiveOssController {
     }
 
     private HiveRecordVO buildHiveRecordVO(HiveRecord record, String category, cc.cc3c.hive.domain.entity.FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
+        CategoryStorageClass storageClass = fileCategoryResolver.resolveRecordStorageClass(record);
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
         PreviewDecision previewDecision = evaluatePreview(record);
@@ -289,7 +289,7 @@ public class HiveOssController {
                 .fileKey(record.getFileKey())
                 .zipped(record.getZipped())
                 .size(record.getSize())
-                .storageClass(record.getStorageClassCache() == null ? null : record.getStorageClassCache().name())
+                .storageClass(storageClass.name())
                 .status(record.getStatus().name())
                 .updateTime(record.getUpdateTime())
                 .unfreezeTime(record.getRestoreTime())
@@ -312,7 +312,7 @@ public class HiveOssController {
     }
 
     private boolean isRestorable(HiveRecord record) {
-        return isArchiveStorageClass(record.getStorageClassCache())
+        return isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))
                 && (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
     }
 
@@ -387,8 +387,7 @@ public class HiveOssController {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
-        refreshStorageClassCache(hiveRecord);
-        if (!isArchiveStorageClass(hiveRecord.getStorageClassCache())) {
+        if (!isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) {
             return ResponseEntity.badRequest().build();
         }
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getProvider()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getBucketName()));
@@ -414,8 +413,7 @@ public class HiveOssController {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
-        refreshStorageClassCache(hiveRecord);
-        if (!isArchiveStorageClass(hiveRecord.getStorageClassCache())) {
+        if (!isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) {
             return ResponseEntity.badRequest().build();
         }
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getProvider()).restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getBucketName()));
@@ -571,40 +569,22 @@ public class HiveOssController {
         }
     }
 
-    private void refreshStorageClassCache(HiveRecord record) {
-        if (StringUtils.isBlank(record.getBucketName())) {
-            return;
+    @PostMapping("/categories/{category}/files/upload/check")
+    public ResponseEntity<?> checkUpload(@PathVariable("category") String category,
+                                         @RequestBody HiveUploadCheckRequest request) {
+        if (request == null || StringUtils.isBlank(request.getFileName())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "fileName is required"));
         }
-        HiveOssTask task = HiveOssTask.createTask().withBucket(record.getBucketName()).withKey(record.getFileKey());
-        try {
-            List<HiveOssObject> objects = hiveOssService.using(record.getProvider()).listObjects(task);
-            for (HiveOssObject object : objects) {
-                if (!StringUtils.equals(object.getFileKey(), record.getFileKey())) {
-                    continue;
-                }
-                CategoryStorageClass remoteStorageClass = toStorageClass(object.getStorageClass());
-                if (remoteStorageClass != record.getStorageClassCache()) {
-                    record.setStorageClassCache(remoteStorageClass);
-                    hiveRecordRepository.save(record);
-                }
-                return;
-            }
-        } catch (Exception e) {
-            log.warn("refresh storageClass cache failed, key={}", record.getFileKey(), e);
+        String bucketName = fileGroupService.resolveBucket(category);
+        HiveUploadCheckVO result = hiveUploadService.checkUpload(bucketName, request.getFileName());
+        if (HiveRecordStatus.UPLOADING.equals(result.getStatus())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(result);
         }
+        return ResponseEntity.ok(result);
     }
 
     private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
         return storageClass == CategoryStorageClass.ARCHIVE;
-    }
-
-    private CategoryStorageClass toStorageClass(String storageClass) {
-        if (StringUtils.isBlank(storageClass)) {
-            return CategoryStorageClass.STANDARD;
-        }
-        return storageClass.toUpperCase(Locale.ROOT).contains(CategoryStorageClass.ARCHIVE.name())
-                ? CategoryStorageClass.ARCHIVE
-                : CategoryStorageClass.STANDARD;
     }
 
     /** Normalize path variable when using {*fileKey} (strip leading slash if present). */
