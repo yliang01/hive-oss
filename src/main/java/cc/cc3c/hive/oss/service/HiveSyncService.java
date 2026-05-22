@@ -93,7 +93,7 @@ public class HiveSyncService {
             if (hiveOssObject == null) {
                 HiveRecord hiveRecord = entry.getValue();
                 hiveRecord.setStatus(HiveRecordStatus.DB_ONLY);
-                hiveRecord.setDeletable(false);
+                hiveRecord.setDeletable(true);
                 dbToOssMismatched++;
             }
         }

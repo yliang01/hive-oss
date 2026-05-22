@@ -17,7 +17,6 @@ flowchart LR
   vendorImpl --> alibabaClient[AlibabaOssClient]
   vendorImpl --> tencentClient[TencentOssClient]
   serviceLayer --> recordRepo[HiveRecordRepository]
-  uploadWatcher[HiveSyncMonitor] --> uploadService[HiveUploadService]
   staticUi[StaticFrontend] --> apiController
 ```
 
@@ -27,7 +26,6 @@ flowchart LR
 |------|------|------|
 | 应用主入口 | `cc.cc3c.hive.oss.HiveOssApplication` | Spring Boot `main`，启动 Web 与调度 |
 | HTTP API | `cc.cc3c.hive.oss.controller.HiveOssController` | REST 接口，供静态前端调用，详见 [静态前端](static-frontend.md) |
-| 上传目录监听 | `cc.cc3c.hive.oss.sync.HiveSyncMonitor` | `ApplicationReadyEvent` 后启动对上传目录的监控 |
 
 ## 模块导航
 
@@ -36,7 +34,7 @@ flowchart LR
 | 后端 API | [backend-api.md](backend-api.md) | REST 接口、请求/响应 VO、与前端对接 |
 | 服务编排 | [service-orchestration.md](service-orchestration.md) | 上传/下载/同步服务与 OSS 门面、配置与调度 |
 | OSS 适配层 | [oss-adapter.md](oss-adapter.md) | 阿里云/腾讯云客户端、统一 HiveOss 接口与实现 |
-| 同步与监控 | [sync-and-watcher.md](sync-and-watcher.md) | 上传目录监听、远程同步触发 |
+| 同步与监控 | [sync-and-watcher.md](sync-and-watcher.md) | 远程同步触发 |
 | 静态前端 | [static-frontend.md](static-frontend.md) | 首页、分类/分组、文件管理页面与 API 调用 |
 
 ## db2oss 集成说明（AutoConfiguration）

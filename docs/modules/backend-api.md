@@ -47,7 +47,7 @@
 
 ## 关键配置项
 
-- 无模块专属配置 key；依赖全局 `hive.uploadDir`、`hive.downloadDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
+- 无模块专属配置 key；依赖全局 `hive.downloadDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
 
 ## 相关文件
 

@@ -7,8 +7,8 @@ spring:
       enabled: false
 
 hive:
-  uploadDir: C:\Users\YLiang\Downloads\hive\upload\
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
+  uploadTmpDir: C:\Users\YLiang\Downloads\hive\upload-tmp\
   h2:
     server:
       enabled: true
