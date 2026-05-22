@@ -84,7 +84,7 @@ public class AlibabaOssClient implements HiveOssClient {
         uploadPartRequest.setUploadId(task.getUploadId());
         uploadPartRequest.setPartNumber(part);
         uploadPartRequest.setPartSize(read);
-        uploadPartRequest.setInputStream(new ByteArrayInputStream(buffer));
+        uploadPartRequest.setInputStream(new ByteArrayInputStream(buffer, 0, read));
         UploadPartResult uploadPartResult = ossClient.uploadPart(uploadPartRequest);
         PartETag partETag = uploadPartResult.getPartETag();
         return new HiveOssPartUploadResult(partETag.getPartNumber(), partETag.getETag());

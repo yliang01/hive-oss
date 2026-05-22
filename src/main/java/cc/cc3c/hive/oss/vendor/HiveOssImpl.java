@@ -73,6 +73,12 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     }
 
     @Override
+    public void uploadStreaming(HiveOssTask task) throws Exception {
+        preMultipartUpload(task);
+        uploadMultipartStreaming(task);
+    }
+
+    @Override
     public void upload(HiveOssTask task) throws Exception {
         Hooks.onErrorDropped(x -> {
         });
@@ -150,6 +156,30 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
             e.printStackTrace();
         } finally {
             lock.unlock();
+        }
+    }
+
+    private void uploadMultipartStreaming(HiveOssTask task) throws Exception {
+        try (InputStream inputStream = task.getInputStream()) {
+            int part = 1;
+            while (true) {
+                byte[] buffer = new byte[partSizeInByte];
+                int read = IOUtils.read(inputStream, buffer, 0, buffer.length);
+                if (read == 0) {
+                    break;
+                }
+                if (task.getUploadedMap().containsKey(part)) {
+                    log.info("skip existing uploaded part {}, key={}", part, task.getKey());
+                } else {
+                    log.info("start streaming upload part {}, key={}", part, task.getKey());
+                    HiveOssPartUploadResult result = ossClient.uploadPart(task, buffer, read, part);
+                    task.getUploadedMap().put(result.getPart(), result.getETag());
+                    log.info("end streaming upload part {}, key={}", part, task.getKey());
+                }
+                part++;
+            }
+            ossClient.completeMultipartUpload(task);
+            log.info("streaming multipart upload completed, key={}", task.getKey());
         }
     }
 

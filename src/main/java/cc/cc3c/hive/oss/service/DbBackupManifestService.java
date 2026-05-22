@@ -10,7 +10,7 @@ import java.util.List;
 @Service
 public class DbBackupManifestService {
     public static final String DB_BACKUP_KEY_PREFIX = "db-backup/";
-    public static final String MANIFEST_SUFFIX = ".sql.gz.manifest.json";
+    public static final String MANIFEST_SUFFIX = ".manifest.json";
 
     public String manifestKey(String batchId) {
         return DB_BACKUP_KEY_PREFIX + batchId + MANIFEST_SUFFIX;
@@ -58,6 +58,16 @@ public class DbBackupManifestService {
         }
         int idx = key.lastIndexOf('/');
         return idx >= 0 ? key.substring(idx + 1) : key;
+    }
+
+    public static String databaseFromBatchId(String batchId) {
+        if (batchId == null || batchId.isEmpty()) {
+            return batchId;
+        }
+        if (batchId.matches(".*-\\d{14}$")) {
+            return batchId.substring(0, batchId.length() - 15);
+        }
+        return batchId;
     }
 
     private static boolean isBlank(String value) {

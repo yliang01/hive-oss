@@ -21,6 +21,10 @@ public class DbRestoreStatusTracker {
         put(batchId, "RESTORED", message);
     }
 
+    public void markRestartNeeded(String batchId, String message) {
+        put(batchId, "RESTART_NEEDED", message);
+    }
+
     public void markFailed(String batchId, String message) {
         put(batchId, "FAILED", message);
     }
@@ -40,18 +44,9 @@ public class DbRestoreStatusTracker {
                 .batchId(batchId)
                 .status(status)
                 .ackTime(Instant.now())
-                .database(databaseFromBatchId(batchId))
+                .database(DbBackupManifestService.databaseFromBatchId(batchId))
                 .message(message)
                 .build());
     }
 
-    private String databaseFromBatchId(String batchId) {
-        if (batchId == null || batchId.isEmpty()) {
-            return batchId;
-        }
-        if (batchId.matches(".*-\\d{14}$")) {
-            return batchId.substring(0, batchId.length() - 15);
-        }
-        return batchId;
-    }
 }

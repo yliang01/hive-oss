@@ -54,7 +54,7 @@ flowchart LR
   - `backup.mysql`：连接目标库、客户端目录、锁表策略等备份基础参数
   - `backup.restore`：恢复输入文件、是否重建库、恢复临时目录
   - `backup.retention`：本地保留策略（如保留天数）
-  - `backup.runtime`：运行工作目录与临时目录
+  - `backup.dir`：备份产物输出目录
   - `backup.security`：异常场景下的清理策略（如失败后删除中间产物）
 
 ### 职责边界（hive-oss vs db2oss）

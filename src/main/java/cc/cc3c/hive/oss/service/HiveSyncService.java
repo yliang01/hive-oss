@@ -38,7 +38,7 @@ public class HiveSyncService {
         Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
                 .listObjects(task)
                 .stream()
-                .filter(object -> !isBackupManagedObject(object.getFileKey()))
+                .filter(object -> !isBackupManagedObject(object.getFileKey()) && !isThumbnailObject(object.getFileKey()))
                 .collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
 
         List<HiveRecord> recordList = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(bucketName);
@@ -108,8 +108,16 @@ public class HiveSyncService {
                 .dbToOssMismatched(dbToOssMismatched).build();
     }
 
+    private static final String THUMB_PREFIX = "thumb/";
+    private static final String THUMB_SUFFIX = "_w320.jpg";
+
     private boolean isBackupManagedObject(String fileKey) {
         return fileKey != null && fileKey.startsWith(DbBackupManifestService.DB_BACKUP_KEY_PREFIX);
+    }
+
+    /** Exclude thumbnail objects (e.g. thumb/{fileKey}_w320.jpg) from syncing into hive_record. */
+    private boolean isThumbnailObject(String fileKey) {
+        return fileKey != null && fileKey.startsWith(THUMB_PREFIX) && fileKey.endsWith(THUMB_SUFFIX);
     }
 
     private CategoryStorageClass parseStorageClass(String storageClass, CategoryStorageClass fallback) {

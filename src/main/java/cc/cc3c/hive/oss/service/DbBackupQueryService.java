@@ -16,7 +16,7 @@ import java.util.*;
 
 /**
  * Provides backup list and ack data from OSS only. Status is UPLOADED when both
- * archive (.sql.gz) and manifest (.sql.gz.manifest.json) exist under db-backup/.
+ * archive and manifest (.manifest.json) exist under db-backup/.
  */
 @Service
 @Slf4j
@@ -74,7 +74,7 @@ public class DbBackupQueryService {
                 .batchId(batchId)
                 .status(STATUS_UPLOADED)
                 .ackTime(ackTime)
-                .database(databaseFromBatchId(batchId))
+                .database(DbBackupManifestService.databaseFromBatchId(batchId))
                 .message("backup uploaded to oss")
                 .build());
     }
@@ -111,7 +111,7 @@ public class DbBackupQueryService {
                         : null;
                 items.add(DbBackupListVO.DbBackupItemVO.builder()
                         .batchId(batchId)
-                        .database(databaseFromBatchId(batchId))
+                        .database(DbBackupManifestService.databaseFromBatchId(batchId))
                         .status(STATUS_UPLOADED)
                         .createdAt(createdAt)
                         .build());
@@ -127,16 +127,4 @@ public class DbBackupQueryService {
                 .build();
     }
 
-    /**
-     * Derives database name from batchId. BatchId format is database-yyyyMMddHHmmss.
-     */
-    static String databaseFromBatchId(String batchId) {
-        if (batchId == null || batchId.isEmpty()) {
-            return batchId;
-        }
-        if (batchId.matches(".*-\\d{14}$")) {
-            return batchId.substring(0, batchId.length() - 15);
-        }
-        return batchId;
-    }
 }

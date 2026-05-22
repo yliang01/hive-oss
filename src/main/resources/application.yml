@@ -2,6 +2,9 @@ spring.config.import: classpath:external-secret.yml
 spring.profiles.active: prod
 
 spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/h2
   servlet:
     multipart:
       enabled: false
@@ -9,23 +12,29 @@ spring:
 hive:
   uploadDir: C:\Users\YLiang\Downloads\hive\upload\
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
+  h2:
+    server:
+      enabled: true
+      port: 9092
+      baseDir: ./data/db
+      allowOthers: false
   preview:
     max-size-bytes: 10485760
 
 backup:
+  database:
+    type: h2
+
   mysql:
     clientBinDir: C:/Program Files/MySQL/MySQL Server 8.4/bin
     host: 127.0.0.1
     port: 3306
-    database: hiveqqa
+    database: hive
     user: root
     password: mysqlpassword
     lockTables: false
-  runtime:
-    workDir: work/db-backup
-    tempDir: tmp/db-backup
-  handoff:
-    waitForAck: false
-  restore:
-    dropAndRecreateBeforeImport: true
-    tempDir: tmp/db-restore
+
+  h2:
+    jdbcUrl: jdbc:h2:tcp://localhost:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""

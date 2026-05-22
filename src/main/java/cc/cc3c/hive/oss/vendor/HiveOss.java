@@ -14,6 +14,8 @@ public interface HiveOss {
 
     void uploadSync(HiveOssTask task) throws Exception;
 
+    void uploadStreaming(HiveOssTask task) throws Exception;
+
     void upload(HiveOssTask task) throws Exception;
 
     HiveRestoreResult restoreCheck(HiveOssTask task);

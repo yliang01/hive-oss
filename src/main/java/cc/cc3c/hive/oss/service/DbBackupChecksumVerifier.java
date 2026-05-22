@@ -3,8 +3,11 @@ package cc.cc3c.hive.oss.service;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -37,8 +40,10 @@ public class DbBackupChecksumVerifier {
     private String sha256Hex(Path file) throws IOException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(Files.readAllBytes(file));
-            return HexFormat.of().formatHex(hash);
+            try (InputStream in = new DigestInputStream(Files.newInputStream(file), digest)) {
+                in.transferTo(OutputStream.nullOutputStream());
+            }
+            return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException e) {
             throw new IOException("SHA-256 unavailable", e);
         }

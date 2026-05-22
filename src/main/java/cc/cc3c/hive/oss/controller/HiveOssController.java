@@ -1,9 +1,11 @@
 package cc.cc3c.hive.oss.controller;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.*;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
@@ -12,6 +14,7 @@ import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveSyncService;
 import cc.cc3c.hive.oss.service.HiveUploadService;
+import cc.cc3c.hive.oss.service.UploadAlreadyInProgressException;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
@@ -47,6 +50,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -54,6 +58,8 @@ public class HiveOssController {
     private static final String PREVIEW_BLOCKED_FROZEN = "FROZEN";
     private static final String PREVIEW_BLOCKED_TOO_LARGE = "TOO_LARGE";
     private static final String PREVIEW_BLOCKED_UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
+    /** Record is OSS-only (synced from remote); no decryption metadata, so preview not available. */
+    private static final String PREVIEW_BLOCKED_OSS_ONLY = "OSS_ONLY";
     private static final Map<String, String> MIME_BY_EXTENSION = Map.ofEntries(
             Map.entry("jpg", MediaType.IMAGE_JPEG_VALUE),
             Map.entry("jpeg", MediaType.IMAGE_JPEG_VALUE),
@@ -73,6 +79,7 @@ public class HiveOssController {
     private final HiveDownloadService hiveDownloadService;
     private final HiveSyncService hiveSyncService;
     private final HiveRecordRepository hiveRecordRepository;
+    private final HiveRecordImageMetaRepository imageMetaRepository;
     private final FileGroupService fileGroupService;
     private final FileCategoryResolver fileCategoryResolver;
     private long previewMaxSizeBytes;
@@ -82,6 +89,7 @@ public class HiveOssController {
                              HiveDownloadService hiveDownloadService,
                              HiveSyncService hiveSyncService,
                              HiveRecordRepository hiveRecordRepository,
+                             HiveRecordImageMetaRepository imageMetaRepository,
                              FileGroupService fileGroupService,
                              FileCategoryResolver fileCategoryResolver) {
         this.hiveOssService = hiveOssService;
@@ -89,6 +97,7 @@ public class HiveOssController {
         this.hiveDownloadService = hiveDownloadService;
         this.hiveSyncService = hiveSyncService;
         this.hiveRecordRepository = hiveRecordRepository;
+        this.imageMetaRepository = imageMetaRepository;
         this.fileGroupService = fileGroupService;
         this.fileCategoryResolver = fileCategoryResolver;
     }
@@ -108,13 +117,16 @@ public class HiveOssController {
         return fileGroupService.listGroups(category);
     }
 
-    @GetMapping("/categories/{category}/files/{fileKey}")
+    @GetMapping("/categories/{category}/files/{*fileKey}")
     public ResponseEntity<HiveRecordVO> getFile(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(buildHiveRecordVO(optional.get(), category, null));
+        HiveRecord record = optional.get();
+        Optional<HiveRecordImageMeta> imageMeta = imageMetaRepository.findByHiveRecordId(record.getId());
+        return ResponseEntity.ok(buildHiveRecordVO(record, category, null, imageMeta));
     }
 
     @GetMapping("/categories/{category}/files")
@@ -166,15 +178,45 @@ public class HiveOssController {
 
         Map<Integer, cc.cc3c.hive.domain.entity.FileGroupRecord> groupRecordMap =
                 fileGroupService.findGroupRecordMapByRecordIds(pageResult.stream().map(HiveRecord::getId).toList());
+        List<Integer> recordIds = pageResult.stream().map(HiveRecord::getId).toList();
+        Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
+                .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
         List<HiveRecordVO> list = pageResult.stream()
-                .map(record -> buildHiveRecordVO(record, category, groupRecordMap.get(record.getId())))
+                .map(record -> buildHiveRecordVO(record, category, groupRecordMap.get(record.getId()), Optional.ofNullable(imageMetaMap.get(record.getId()))))
                 .toList();
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
     }
 
-    @GetMapping("/categories/{category}/files/preview/{fileKey}")
+    @GetMapping("/categories/{category}/files/preview/thumbnail/{*fileKey}")
+    public ResponseEntity<StreamingResponseBody> previewThumbnail(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        String key = normalizeFileKey(fileKey);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), key);
+        if (optional.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        HiveRecord hiveRecord = optional.get();
+        Optional<HiveRecordImageMeta> metaOpt = imageMetaRepository.findByHiveRecordId(hiveRecord.getId());
+        if (metaOpt.isEmpty() || !"READY".equals(metaOpt.get().getThumbStatus()) || StringUtils.isBlank(metaOpt.get().getThumbKey())) {
+            return ResponseEntity.notFound().build();
+        }
+        StreamingResponseBody body = outputStream -> {
+            try {
+                hiveDownloadService.streamPreviewThumbnail(hiveRecord, outputStream);
+            } catch (Exception e) {
+                log.error("thumbnail stream failed {}", key, e);
+                throw new IOException("thumbnail stream failed", e);
+            }
+        };
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "private,no-store")
+                .contentType(MediaType.IMAGE_JPEG)
+                .body(body);
+    }
+
+    @GetMapping("/categories/{category}/files/preview/{*fileKey}")
     public ResponseEntity<StreamingResponseBody> previewFile(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
+        String key = normalizeFileKey(fileKey);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), key);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -195,7 +237,7 @@ public class HiveOssController {
             try {
                 hiveDownloadService.streamPreview(hiveRecord, outputStream);
             } catch (Exception e) {
-                log.error("preview stream failed {}", fileKey, e);
+                log.error("preview stream failed {}", key, e);
                 throw new IOException("preview stream failed", e);
             }
         };
@@ -217,7 +259,7 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    private HiveRecordVO buildHiveRecordVO(HiveRecord record, String category, cc.cc3c.hive.domain.entity.FileGroupRecord groupRecord) {
+    private HiveRecordVO buildHiveRecordVO(HiveRecord record, String category, cc.cc3c.hive.domain.entity.FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
         PreviewDecision previewDecision = evaluatePreview(record);
@@ -234,6 +276,9 @@ public class HiveOssController {
         String finalCategoryCode = finalCategory == null ? null : finalCategory.getCode();
         String previewUrl = previewDecision.previewable && finalCategoryCode != null
                 ? "/categories/" + finalCategoryCode + "/files/preview/" + record.getFileKey() : null;
+        boolean thumbReady = imageMeta.map(m -> "READY".equals(m.getThumbStatus()) && StringUtils.isNotBlank(m.getThumbKey())).orElse(false);
+        String thumbnailUrl = thumbReady && finalCategoryCode != null
+                ? "/categories/" + finalCategoryCode + "/files/preview/thumbnail/" + record.getFileKey() : null;
         return HiveRecordVO.builder()
                 .category(finalCategoryCode)
                 .categoryLabel(finalCategory == null ? null : finalCategory.getName())
@@ -255,6 +300,11 @@ public class HiveOssController {
                 .deletable(record.getDeletable())
                 .previewable(previewDecision.previewable)
                 .previewUrl(previewUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .thumbKey(imageMeta.map(HiveRecordImageMeta::getThumbKey).orElse(null))
+                .thumbStatus(imageMeta.map(HiveRecordImageMeta::getThumbStatus).orElse(null))
+                .imageWidth(imageMeta.map(HiveRecordImageMeta::getImageWidth).orElse(null))
+                .imageHeight(imageMeta.map(HiveRecordImageMeta::getImageHeight).orElse(null))
                 .mimeType(previewDecision.mimeType)
                 .previewBlockedReason(previewDecision.blockedReason)
                 .previewMaxSizeBytes(previewMaxSizeBytes)
@@ -267,6 +317,9 @@ public class HiveOssController {
     }
 
     private PreviewDecision evaluatePreview(HiveRecord record) {
+        if (HiveRecordStatus.OSS_ONLY.equals(record.getStatus())) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
+        }
         if (isRestorable(record)) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_FROZEN);
         }
@@ -312,8 +365,9 @@ public class HiveOssController {
         }
     }
 
-    @DeleteMapping("/categories/{category}/files/{fileKey}")
+    @DeleteMapping("/categories/{category}/files/{*fileKey}")
     public ResponseEntity<Void> deleteFiles(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -325,8 +379,9 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/categories/{category}/files/unfreeze/{fileKey}")
+    @PostMapping("/categories/{category}/files/unfreeze/{*fileKey}")
     public ResponseEntity<Void> unfreezeFiles(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -351,8 +406,9 @@ public class HiveOssController {
         return ResponseEntity.internalServerError().build();
     }
 
-    @GetMapping("/categories/{category}/files/unfreeze-status/{fileKey}")
+    @GetMapping("/categories/{category}/files/unfreeze-status/{*fileKey}")
     public ResponseEntity<Void> unfreezeState(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -376,8 +432,9 @@ public class HiveOssController {
         return ResponseEntity.internalServerError().build();
     }
 
-    @PostMapping("/categories/{category}/files/download-task/{fileKey}")
+    @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
     public ResponseEntity<Void> downloadTask(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -392,8 +449,9 @@ public class HiveOssController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/categories/{category}/files/download-task-status/{fileKey}")
+    @GetMapping("/categories/{category}/files/download-task-status/{*fileKey}")
     public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -416,8 +474,9 @@ public class HiveOssController {
         return ResponseEntity.ok(builder.build());
     }
 
-    @PostMapping("/categories/{category}/files/release-local/{fileKey}")
+    @PostMapping("/categories/{category}/files/release-local/{*fileKey}")
     public ResponseEntity<HiveDownloadStatusVO> releaseLocal(@PathVariable("category") String category, @PathVariable("fileKey") String fileKey) {
+        fileKey = normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(fileGroupService.resolveBucket(category), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -448,6 +507,22 @@ public class HiveOssController {
             if (!StringUtils.equals(record.getBucketName(), bucketName)) {
                 continue;
             }
+            // 删除缩略图对象及元数据（如果存在）
+            HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(record.getId()).orElse(null);
+            if (meta != null && StringUtils.isNotBlank(meta.getThumbKey())) {
+                HiveOssTask thumbTask = HiveOssTask.createTask()
+                        .withBucket(record.getBucketName())
+                        .withKey(meta.getThumbKey());
+                try {
+                    hiveOssService.using(record.getProvider()).delete(thumbTask);
+                } catch (Exception e) {
+                    log.error("failed to delete thumbnail {}", thumbTask, e);
+                    return ResponseEntity.internalServerError().build();
+                }
+            }
+            if (meta != null) {
+                imageMetaRepository.delete(meta);
+            }
             HiveOssTask hiveOssTask = HiveOssTask.createTask().withBucket(record.getBucketName()).withKey(record.getFileKey());
             try {
                 hiveOssService.using(record.getProvider()).delete(hiveOssTask);
@@ -473,19 +548,26 @@ public class HiveOssController {
     }
 
     @PostMapping("/categories/{category}/files/upload")
-    public ResponseEntity<HiveUploadVO> upload(@PathVariable("category") String category, HttpServletRequest request) throws IOException {
+    public ResponseEntity<?> upload(@PathVariable("category") String category, HttpServletRequest request) throws IOException {
         String bucketName = fileGroupService.resolveBucket(category);
         CategoryStorageClass storageClass = fileCategoryResolver.resolveStorageClass(category);
         JakartaServletFileUpload<?, ?> upload = new JakartaServletFileUpload<>();
-        upload.setFileSizeMax(100 * 1024 * 1024);
         FileItemInputIterator iter = upload.getItemIterator(request);
+        if (!iter.hasNext()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "请上传一个文件"));
+        }
         FileItemInput item = iter.next();
+        if (item.isFormField()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "需要文件类型 part，不能是表单字段"));
+        }
         try {
-            String fileKey = hiveUploadService.uploadSync(bucketName, storageClass, item.getName(), item.getInputStream());
+            String fileKey = hiveUploadService.uploadStreaming(bucketName, storageClass, category, item.getName(), item.getInputStream());
             return ResponseEntity.ok(HiveUploadVO.builder().fileKey(fileKey).build());
+        } catch (UploadAlreadyInProgressException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("upload failed", e);
-            return ResponseEntity.internalServerError().build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage() != null ? e.getMessage() : "上传失败"));
         }
     }
 
@@ -523,5 +605,13 @@ public class HiveOssController {
         return storageClass.toUpperCase(Locale.ROOT).contains(CategoryStorageClass.ARCHIVE.name())
                 ? CategoryStorageClass.ARCHIVE
                 : CategoryStorageClass.STANDARD;
+    }
+
+    /** Normalize path variable when using {*fileKey} (strip leading slash if present). */
+    private static String normalizeFileKey(String fileKey) {
+        if (fileKey == null) {
+            return null;
+        }
+        return fileKey.startsWith("/") ? fileKey.substring(1) : fileKey;
     }
 }

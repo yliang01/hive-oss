@@ -1,8 +1,10 @@
 package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import jakarta.annotation.PostConstruct;
@@ -23,11 +25,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HiveDownloadService {
 
     private final HiveOssService hiveOssService;
-
     private final HiveRecordRepository hiveRecordRepository;
+    private final HiveRecordImageMetaRepository imageMetaRepository;
 
-    public HiveDownloadService(HiveRecordRepository hiveRecordRepository, HiveOssService hiveOssService) {
+    public HiveDownloadService(HiveRecordRepository hiveRecordRepository,
+                              HiveRecordImageMetaRepository imageMetaRepository,
+                              HiveOssService hiveOssService) {
         this.hiveRecordRepository = hiveRecordRepository;
+        this.imageMetaRepository = imageMetaRepository;
         this.hiveOssService = hiveOssService;
     }
 
@@ -82,6 +87,23 @@ public class HiveDownloadService {
 
     public void streamPreview(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
         HiveOssTask task = createOutputTask(hiveRecord, outputStream);
+        hiveOssService.using(hiveRecord.getProvider()).download(task);
+    }
+
+    /**
+     * Stream thumbnail image (decrypted). Loads image_meta by record id; requires thumbStatus READY and thumbKey set.
+     */
+    public void streamPreviewThumbnail(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
+        HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(hiveRecord.getId()).orElse(null);
+        if (meta == null || !"READY".equals(meta.getThumbStatus()) || StringUtils.isBlank(meta.getThumbKey())) {
+            throw new IllegalArgumentException("no thumbnail key for record");
+        }
+        String thumbFileName = ThumbnailKeyHelper.thumbFileNameForEncryption(hiveRecord.getFileKey());
+        HiveOssTask task = HiveOssTask.createTask()
+                .withBucket(hiveRecord.getBucketName())
+                .withKey(meta.getThumbKey())
+                .withOutputStream(outputStream)
+                .withEncryption(thumbFileName);
         hiveOssService.using(hiveRecord.getProvider()).download(task);
     }
 

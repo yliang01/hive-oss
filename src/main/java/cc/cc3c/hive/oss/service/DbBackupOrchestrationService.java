@@ -2,18 +2,18 @@ package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
+import cc.cc3c.hive.oss.tools.H2RestoreTool;
 import cc.cc3c.hive.oss.vendor.HiveOss;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.example.backup.config.BackupProperties;
-import com.example.backup.model.BackupArtifacts;
-import com.example.backup.model.RestoreResult;
-import com.example.backup.service.BackupService;
-import com.example.backup.service.RestoreService;
+import cc.cc3c.hive.db2oss.manifest.BackupManifest;
+import cc.cc3c.hive.db2oss.model.BackupArtifacts;
+import cc.cc3c.hive.db2oss.model.RestoreResult;
+import cc.cc3c.hive.db2oss.service.BackupService;
+import cc.cc3c.hive.db2oss.service.RestoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -21,22 +21,24 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class DbBackupOrchestrationService {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ExecutorService ASYNC_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "db-backup-async");
+        t.setDaemon(true);
+        return t;
+    });
 
     private final BackupService backupService;
     private final RestoreService restoreService;
-    private final BackupProperties backupProperties;
     private final HiveOssService hiveOssService;
     private final DbBackupManifestService manifestService;
     private final DbBackupChecksumVerifier checksumVerifier;
@@ -45,19 +47,7 @@ public class DbBackupOrchestrationService {
     private final AlibabaOssConfig alibabaOssConfig;
 
     public String startBackup() {
-        String database = backupProperties.getMysql().getDatabase();
-        String batchId = database + "-" + OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        CompletableFuture.runAsync(() -> runBackupAsync(batchId), Executors.newCachedThreadPool());
-        return batchId;
-    }
-
-    private void runBackupAsync(String batchId) {
-        try {
-            backupService.backup(backupProperties, batchId, artifacts -> uploadBackupArtifacts(artifacts));
-            log.info("Backup uploaded to OSS, batchId={}", batchId);
-        } catch (Exception e) {
-            log.error("Backup failed for batchId={}", batchId, e);
-        }
+        return backupService.backup(this::uploadBackupArtifacts);
     }
 
     private void uploadBackupArtifacts(BackupArtifacts artifacts) throws Exception {
@@ -112,7 +102,7 @@ public class DbBackupOrchestrationService {
             throw new IllegalArgumentException("manifest not found for batch: " + batchId);
         }
         restoreStatusTracker.markPending(batchId, "restore task accepted");
-        CompletableFuture.runAsync(() -> runRestoreAsync(batchId), Executors.newCachedThreadPool());
+        CompletableFuture.runAsync(() -> runRestoreAsync(batchId), ASYNC_EXECUTOR);
     }
 
     public void deleteBackup(String batchId) {
@@ -137,9 +127,9 @@ public class DbBackupOrchestrationService {
                     .withOutputStream(manifestOut)
                     .withEncryption(manifestService.manifestFileName(batchId));
             oss.download(downloadTask);
-            ManifestNames manifestNames = parseManifestNames(manifestOut.toByteArray());
-            String archiveKey = toBackupObjectKey(manifestNames.archiveFile());
-            String checksumKey = toBackupObjectKey(manifestNames.checksumFile());
+            BackupManifest manifest = BackupManifest.read(manifestOut.toByteArray());
+            String archiveKey = toBackupObjectKey(manifest.archiveFile());
+            String checksumKey = toBackupObjectKey(manifest.checksumFile());
             deleteBackupObject(oss, archiveKey);
             deleteBackupObject(oss, checksumKey);
             deleteBackupObject(oss, manifestKey);
@@ -156,7 +146,7 @@ public class DbBackupOrchestrationService {
         Path checksumPath = null;
         Path manifestPath = null;
         try {
-            Path tempDir = Path.of(backupProperties.getRestore().getTempDir());
+            Path tempDir = Path.of(backupService.backupDir());
             Files.createDirectories(tempDir);
             manifestPath = tempDir.resolve(manifestService.manifestFileName(batchId));
             try (FileOutputStream out = new FileOutputStream(manifestPath.toFile())) {
@@ -168,9 +158,13 @@ public class DbBackupOrchestrationService {
                 hiveOssService.using(HiveStorageProvider.ALIBABA).download(task);
             }
 
-            ManifestNames manifestNames = parseManifestNames(manifestPath);
-            String archiveFileName = manifestNames.archiveFile();
-            String checksumFileName = manifestNames.checksumFile();
+            BackupManifest manifest = BackupManifest.read(manifestPath);
+            if (!isRestoreCompatible(manifest.databaseType())) {
+                throw new IllegalStateException("backup database type " + manifest.databaseType()
+                        + " cannot be restored into current database type " + backupService.databaseType());
+            }
+            String archiveFileName = manifest.archiveFile();
+            String checksumFileName = manifest.checksumFile();
             String archiveKey = toBackupObjectKey(archiveFileName);
             String checksumKey = toBackupObjectKey(checksumFileName);
             log.info("Restore keys resolved from manifest file names, batchId={}", batchId);
@@ -198,7 +192,15 @@ public class DbBackupOrchestrationService {
 
             checksumVerifier.verifySha256(archivePath, checksumPath);
 
-            RestoreResult result = restoreService.restore(backupProperties, archivePath);
+            if ("h2".equalsIgnoreCase(backupService.databaseType())) {
+                writePendingH2RestoreRequest(batchId, archivePath, manifest.database());
+                archivePath = null;
+                log.info("H2 restore request created for batchId={}; restart app to apply", batchId);
+                restoreStatusTracker.markRestartNeeded(batchId, "restore downloaded; restart application to apply H2 restore");
+                return;
+            }
+
+            RestoreResult result = restoreService.restore(archivePath);
             if (result.mysqlExitCode() != 0) {
                 throw new RuntimeException("mysql import exit code: " + result.mysqlExitCode());
             }
@@ -230,22 +232,6 @@ public class DbBackupOrchestrationService {
         return DbBackupManifestService.DB_BACKUP_KEY_PREFIX + fileName;
     }
 
-    private ManifestNames parseManifestNames(Path manifestPath) throws Exception {
-        JsonNode root = OBJECT_MAPPER.readTree(manifestPath.toFile());
-        return parseManifestNames(root);
-    }
-
-    private ManifestNames parseManifestNames(byte[] manifestContent) throws Exception {
-        JsonNode root = OBJECT_MAPPER.readTree(manifestContent);
-        return parseManifestNames(root);
-    }
-
-    private ManifestNames parseManifestNames(JsonNode root) {
-        String archiveFile = textValue(root, "archiveFile");
-        String checksumFile = textValue(root, "checksumFile");
-        return new ManifestNames(archiveFile, checksumFile);
-    }
-
     private boolean isLatestBackup(String batchId) {
         List<DbBackupListVO.DbBackupItemVO> items = dbBackupQueryService.listBackups().getItems();
         if (items == null || items.isEmpty()) {
@@ -262,15 +248,14 @@ public class DbBackupOrchestrationService {
         oss.delete(deleteTask);
     }
 
-    private String textValue(JsonNode root, String fieldName) {
-        JsonNode node = root == null ? null : root.get(fieldName);
-        String value = node == null ? null : node.asText(null);
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("manifest missing required field: " + fieldName);
-        }
-        return value;
+
+    private boolean isRestoreCompatible(String backupDatabaseType) {
+        return backupDatabaseType == null || backupDatabaseType.isBlank()
+                || backupDatabaseType.equalsIgnoreCase(backupService.databaseType());
     }
 
-    private record ManifestNames(String archiveFile, String checksumFile) {
+    private void writePendingH2RestoreRequest(String batchId, Path archivePath, String backupDatabaseName) throws Exception {
+        H2RestoreTool.writePendingRequest(batchId, archivePath, backupDatabaseName);
     }
+
 }
