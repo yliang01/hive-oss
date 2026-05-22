@@ -186,6 +186,7 @@ public class HiveUploadService implements FileAlterationListener {
                 hiveOssService.using(hiveRecord.getProvider()).uploadSync(task);
 
                 hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
+                hiveRecord.setDeletable(isDeletableAfterUpload(resolvedStorageClass));
                 hiveRecordRepository.save(hiveRecord);
                 if (CATEGORY_IMAGE_PREVIEW.equals(StringUtils.trimToEmpty(categoryCode).toUpperCase())
                         && thumbnailGeneratorService.isSupportedImage(fileName)) {
@@ -230,6 +231,7 @@ public class HiveUploadService implements FileAlterationListener {
             hiveOssService.using(hiveRecord.getProvider()).uploadStreaming(task);
 
             hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
+            hiveRecord.setDeletable(isDeletableAfterUpload(resolvedStorageClass));
             hiveRecordRepository.save(hiveRecord);
             if (CATEGORY_IMAGE_PREVIEW.equals(StringUtils.trimToEmpty(categoryCode).toUpperCase())
                     && thumbnailGeneratorService.isSupportedImage(fileName)) {
@@ -290,6 +292,10 @@ public class HiveUploadService implements FileAlterationListener {
 
     private CategoryStorageClass resolveStorageClass(CategoryStorageClass storageClass) {
         return storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
+    }
+
+    private boolean isDeletableAfterUpload(CategoryStorageClass storageClass) {
+        return resolveStorageClass(storageClass) != CategoryStorageClass.ARCHIVE;
     }
 
     /**
