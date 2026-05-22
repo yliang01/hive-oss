@@ -222,10 +222,8 @@ public class FileGroupService {
                 .id(category.getId())
                 .code(category.getCode())
                 .name(category.getName())
-                .description(category.getDescription())
                 .bucketName(category.getBucketName())
                 .storageClass(category.getStorageClass() == null ? null : category.getStorageClass().name())
-                .previewPolicy(category.getPreviewPolicy())
                 .uiVariant(category.getUiVariant())
                 .enabled(category.getEnabled())
                 .sortOrder(category.getSortOrder())
@@ -246,7 +244,6 @@ public class FileGroupService {
 
     private void fillCategory(FileCategoryEntity entity, CategoryUpsertRequest request) {
         entity.setName(StringUtils.defaultIfBlank(request.getName(), entity.getName()));
-        entity.setDescription(StringUtils.trimToNull(request.getDescription()));
         String bucketName = StringUtils.trimToNull(request.getBucketName());
         if (bucketName != null) {
             if (entity.getId() == null) {
@@ -265,7 +262,6 @@ public class FileGroupService {
         } else if (entity.getStorageClass() == null) {
             entity.setStorageClass(CategoryStorageClass.STANDARD);
         }
-        entity.setPreviewPolicy(StringUtils.defaultIfBlank(request.getPreviewPolicy(), "DEFAULT"));
         entity.setUiVariant(StringUtils.defaultIfBlank(request.getUiVariant(), "hot"));
         if (request.getEnabled() != null) {
             entity.setEnabled(request.getEnabled());

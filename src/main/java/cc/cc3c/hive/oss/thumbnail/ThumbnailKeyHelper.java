@@ -1,4 +1,4 @@
-package cc.cc3c.hive.oss.service;
+package cc.cc3c.hive.oss.thumbnail;
 
 /**
  * Shared naming for thumbnail OSS key and encryption IV.

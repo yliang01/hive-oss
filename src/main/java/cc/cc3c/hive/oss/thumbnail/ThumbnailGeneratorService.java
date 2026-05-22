@@ -1,4 +1,4 @@
-package cc.cc3c.hive.oss.service;
+package cc.cc3c.hive.oss.thumbnail;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -62,25 +62,6 @@ public class ThumbnailGeneratorService {
             return generateFromBufferedImage(src);
         } catch (IOException e) {
             log.warn("thumbnail generation failed for file {}", imageFile.getName(), e);
-            return java.util.Optional.empty();
-        }
-    }
-
-    /**
-     * Generate thumbnail from image input stream. Caller is responsible for closing the stream.
-     */
-    public java.util.Optional<ThumbResult> generateFromStream(InputStream imageStream) {
-        if (imageStream == null) {
-            return java.util.Optional.empty();
-        }
-        try {
-            BufferedImage src = ImageIO.read(imageStream);
-            if (src == null) {
-                return java.util.Optional.empty();
-            }
-            return generateFromBufferedImage(src);
-        } catch (IOException e) {
-            log.warn("thumbnail generation failed from stream", e);
             return java.util.Optional.empty();
         }
     }

@@ -9,6 +9,7 @@ spring:
 hive:
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
   uploadTmpDir: C:\Users\YLiang\Downloads\hive\upload-tmp\
+  thumbnailStagingDir: C:\Users\YLiang\Downloads\hive\thumbnail-staging\
   h2:
     server:
       enabled: true

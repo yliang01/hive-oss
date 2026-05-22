@@ -1,13 +1,12 @@
 package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
-import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
-import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
+import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -17,13 +16,11 @@ import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Slf4j
@@ -31,21 +28,18 @@ import java.util.Optional;
 public class HiveUploadService {
 
     private final HiveRecordRepository hiveRecordRepository;
-    private final HiveRecordImageMetaRepository imageMetaRepository;
     private final HiveOssService hiveOssService;
-    private final ThumbnailGeneratorService thumbnailGeneratorService;
+    private final ThumbnailAsyncService thumbnailAsyncService;
 
     @Value("${hive.uploadTmpDir}")
     private String uploadTmpDir;
 
     public HiveUploadService(HiveRecordRepository hiveRecordRepository,
-                             HiveRecordImageMetaRepository imageMetaRepository,
                              HiveOssService hiveOssService,
-                             ThumbnailGeneratorService thumbnailGeneratorService) {
+                             ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
-        this.imageMetaRepository = imageMetaRepository;
         this.hiveOssService = hiveOssService;
-        this.thumbnailGeneratorService = thumbnailGeneratorService;
+        this.thumbnailAsyncService = thumbnailAsyncService;
     }
 
     @PostConstruct
@@ -54,32 +48,9 @@ public class HiveUploadService {
     }
 
     /**
-     * Upload file to OSS, always buffering via uploadTmpDir.
-     * Generates thumbnail when uiVariant is "image" and fileName is a supported image format.
-     */
-    public String uploadSync(String bucketName, CategoryStorageClass storageClass,
-                             String uiVariant, String fileName, InputStream inputStream) throws Exception {
-        String fileKey = DigestUtils.md5Hex(fileName);
-        CategoryStorageClass resolved = resolveStorageClass(storageClass);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByBucketNameAndFileKey(bucketName, fileKey);
-        if (isActiveUploaded(existing)) {
-            IOUtils.closeQuietly(inputStream);
-            return fileKey;
-        }
-        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
-        try {
-            doBufferedUpload(hiveRecord, fileKey, fileName, resolved,
-                    needsLocalBuffer(uiVariant, fileName), inputStream);
-            return fileKey;
-        } catch (Exception e) {
-            markFailed(hiveRecord);
-            throw e;
-        }
-    }
-
-    /**
      * Upload file to OSS.
-     * Images (uiVariant == "image" with a supported format) are buffered to uploadTmpDir so a thumbnail can be generated.
+     * Images (uiVariant == "image" with a supported format) are buffered to uploadTmpDir; thumbnail
+     * generation is submitted asynchronously and the upload returns without waiting for it.
      * All other files are streamed directly without local buffering.
      */
     public String uploadStreaming(String bucketName, CategoryStorageClass storageClass,
@@ -95,7 +66,7 @@ public class HiveUploadService {
         // without triggering markFailed because no save has occurred at that point.
         HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
         try {
-            boolean thumbnail = needsLocalBuffer(uiVariant, fileName);
+            boolean thumbnail = thumbnailAsyncService.isThumbnailEligible(uiVariant, fileName);
             if (thumbnail) {
                 doBufferedUpload(hiveRecord, fileKey, fileName, resolved, true, inputStream);
             } else {
@@ -126,10 +97,6 @@ public class HiveUploadService {
                 .build();
     }
 
-    private boolean needsLocalBuffer(String uiVariant, String fileName) {
-        return "image".equalsIgnoreCase(uiVariant) && thumbnailGeneratorService.isSupportedImage(fileName);
-    }
-
     private void doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
                                    CategoryStorageClass storageClass, boolean generateThumbnail,
                                    InputStream inputStream) throws Exception {
@@ -149,7 +116,7 @@ public class HiveUploadService {
             }
             markUploaded(hiveRecord, storageClass);
             if (generateThumbnail) {
-                uploadThumbnailAndSaveMeta(hiveRecord, fileKey, tempFile, storageClass);
+                thumbnailAsyncService.submitAsync(hiveRecord, fileKey, tempFile);
             }
         } finally {
             FileUtils.deleteQuietly(tempFile);
@@ -209,50 +176,5 @@ public class HiveUploadService {
 
     private boolean isDeletableAfterUpload(CategoryStorageClass storageClass) {
         return resolveStorageClass(storageClass) != CategoryStorageClass.ARCHIVE;
-    }
-
-    /**
-     * Generate thumbnail, upload with encryption, and persist thumbKey/thumbStatus/dimensions in hive_record_image_meta.
-     * On any failure sets thumbStatus to FAILED and does not throw.
-     */
-    private void uploadThumbnailAndSaveMeta(HiveRecord hiveRecord, String fileKey, File imageFile, CategoryStorageClass storageClass) {
-        LocalDateTime now = LocalDateTime.now();
-        HiveRecordImageMeta meta = HiveRecordImageMeta.builder()
-                .hiveRecordId(hiveRecord.getId())
-                .thumbStatus("PENDING")
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-        imageMetaRepository.save(meta);
-        try {
-            var thumbOpt = thumbnailGeneratorService.generateFromFile(imageFile);
-            if (thumbOpt.isEmpty()) {
-                meta.setThumbStatus("FAILED");
-                meta.setUpdatedAt(LocalDateTime.now());
-                imageMetaRepository.save(meta);
-                return;
-            }
-            var thumb = thumbOpt.get();
-            String thumbKey = ThumbnailKeyHelper.thumbKey(fileKey);
-            String thumbFileName = ThumbnailKeyHelper.thumbFileNameForEncryption(fileKey);
-            HiveOssTask thumbTask = HiveOssTask.createTask()
-                    .withBucket(hiveRecord.getBucketName())
-                    .withKey(thumbKey)
-                    .withInputStream(new ByteArrayInputStream(thumb.thumbJpeg()))
-                    .withStorageClass(resolveStorageClass(storageClass).name())
-                    .withEncryption(thumbFileName);
-            hiveOssService.using(hiveRecord.getProvider()).uploadSync(thumbTask);
-            meta.setThumbKey(thumbKey);
-            meta.setThumbStatus("READY");
-            meta.setImageWidth(thumb.imageWidth());
-            meta.setImageHeight(thumb.imageHeight());
-            meta.setUpdatedAt(LocalDateTime.now());
-            imageMetaRepository.save(meta);
-        } catch (Exception e) {
-            log.warn("thumbnail upload failed for fileKey={}", fileKey, e);
-            meta.setThumbStatus("FAILED");
-            meta.setUpdatedAt(LocalDateTime.now());
-            imageMetaRepository.save(meta);
-        }
     }
 }
