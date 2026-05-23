@@ -78,7 +78,9 @@ public class HiveFilePreviewController {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
-        PreviewDecision previewDecision = assembler.evaluatePreview(hiveRecord);
+        String uiVariant = Optional.ofNullable(fileGroupService.resolveCategory(category))
+                .map(cat -> cat.getUiVariant()).orElse(null);
+        PreviewDecision previewDecision = assembler.evaluatePreview(hiveRecord, uiVariant);
         if (!previewDecision.previewable()) {
             if (HiveRecordVOAssembler.PREVIEW_BLOCKED_FROZEN.equals(previewDecision.blockedReason())) {
                 return ResponseEntity.status(HttpStatus.LOCKED).build();

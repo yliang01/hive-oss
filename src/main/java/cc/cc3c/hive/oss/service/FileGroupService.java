@@ -262,7 +262,7 @@ public class FileGroupService {
         } else if (entity.getStorageClass() == null) {
             entity.setStorageClass(CategoryStorageClass.STANDARD);
         }
-        entity.setUiVariant(StringUtils.defaultIfBlank(request.getUiVariant(), "hot"));
+        entity.setUiVariant(StringUtils.defaultIfBlank(request.getUiVariant(), "file"));
         if (request.getEnabled() != null) {
             entity.setEnabled(request.getEnabled());
         } else if (entity.getEnabled() == null) {

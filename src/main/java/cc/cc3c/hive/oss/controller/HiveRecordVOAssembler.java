@@ -35,6 +35,17 @@ public class HiveRecordVOAssembler {
             "gif",  MediaType.IMAGE_GIF_VALUE,
             "webp", "image/webp"
     );
+    static final Map<String, String> FILE_MIME_BY_EXTENSION = Map.ofEntries(
+            Map.entry("pdf",  "application/pdf"),
+            Map.entry("txt",  MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("log",  MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("json", "application/json"),
+            Map.entry("xml",  "text/xml"),
+            Map.entry("csv",  "text/csv"),
+            Map.entry("yaml", "text/yaml"),
+            Map.entry("yml",  "text/yaml"),
+            Map.entry("md",   "text/markdown")
+    );
 
     private final FileCategoryResolver fileCategoryResolver;
     private final HiveDownloadService hiveDownloadService;
@@ -54,7 +65,11 @@ public class HiveRecordVOAssembler {
         CategoryStorageClass storageClass = fileCategoryResolver.resolveRecordStorageClass(record);
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
-        PreviewDecision previewDecision = evaluatePreview(record);
+        FileCategoryEntity finalCategory = category != null
+                ? fileCategoryResolver.resolveCategory(category)
+                : fileCategoryResolver.resolveFallbackCategory(record);
+        String uiVariant = finalCategory == null ? null : finalCategory.getUiVariant();
+        PreviewDecision previewDecision = evaluatePreview(record, uiVariant);
 
         File downloadFile = hiveDownloadService.getDownloadFile(record);
         String localPath = record.getDownloadStatus() != null && record.getDownloadStatus() == HiveDownloadStatus.success
@@ -63,9 +78,6 @@ public class HiveRecordVOAssembler {
         if (StringUtils.isNotEmpty(localPath)) {
             localPathExists = downloadFile.exists();
         }
-        FileCategoryEntity finalCategory = category != null
-                ? fileCategoryResolver.resolveCategory(category)
-                : fileCategoryResolver.resolveFallbackCategory(record);
         String finalCategoryCode = finalCategory == null ? null : finalCategory.getCode();
         String previewUrl = previewDecision.previewable() && finalCategoryCode != null
                 ? "/categories/" + finalCategoryCode + "/files/preview/" + record.getFileKey() : null;
@@ -113,7 +125,7 @@ public class HiveRecordVOAssembler {
         return storageClass == CategoryStorageClass.ARCHIVE;
     }
 
-    public PreviewDecision evaluatePreview(HiveRecord record) {
+    public PreviewDecision evaluatePreview(HiveRecord record, String uiVariant) {
         if (HiveRecordStatus.OSS_ONLY.equals(record.getStatus())) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
         }
@@ -123,14 +135,14 @@ public class HiveRecordVOAssembler {
         if (record.getSize() != null && previewMaxSizeBytes > 0 && record.getSize() > previewMaxSizeBytes) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_TOO_LARGE);
         }
-        String mimeType = detectPreviewMimeType(record.getFileName());
+        String mimeType = detectPreviewMimeType(record.getFileName(), uiVariant);
         if (mimeType == null) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_UNSUPPORTED_TYPE);
         }
         return PreviewDecision.allowed(mimeType);
     }
 
-    public String detectPreviewMimeType(String fileName) {
+    public String detectPreviewMimeType(String fileName, String uiVariant) {
         if (StringUtils.isBlank(fileName)) {
             return null;
         }
@@ -139,7 +151,11 @@ public class HiveRecordVOAssembler {
             return null;
         }
         String extension = fileName.substring(index + 1).toLowerCase(Locale.ROOT);
-        return MIME_BY_EXTENSION.get(extension);
+        String mime = MIME_BY_EXTENSION.get(extension);
+        if (mime == null && "file".equals(uiVariant)) {
+            mime = FILE_MIME_BY_EXTENSION.get(extension);
+        }
+        return mime;
     }
 
     /** Normalize {*fileKey} path variable — strips leading slash if present. */
