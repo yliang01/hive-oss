@@ -5,6 +5,15 @@ spring:
   servlet:
     multipart:
       enabled: false
+  datasource:
+    url: "jdbc:h2:tcp://127.0.0.1:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE"
+    driver-class-name: org.h2.Driver
+    username: "sa"
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: validate
+#    show-sql: true
 
 hive:
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
@@ -22,17 +31,7 @@ hive:
 backup:
   database:
     type: h2
-
-  mysql:
-    clientBinDir: C:/Program Files/MySQL/MySQL Server 8.4/bin
-    host: 127.0.0.1
-    port: 3306
-    database: hive
-    user: root
-    password: mysqlpassword
-    lockTables: false
-
   h2:
-    jdbcUrl: jdbc:h2:tcp://localhost:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE
+    jdbcUrl: jdbc:h2:tcp://127.0.0.1:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password: ""
