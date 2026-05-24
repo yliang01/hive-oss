@@ -1,7 +1,10 @@
-spring.config.import: optional:file:./config/external-secret.yml
 spring.profiles.active: prod
 
 spring:
+  config:
+    import:
+      - optional:file:./hive-oss/external-secret.yml
+      - optional:file:./config/external-secret.yml
   servlet:
     multipart:
       enabled: false
