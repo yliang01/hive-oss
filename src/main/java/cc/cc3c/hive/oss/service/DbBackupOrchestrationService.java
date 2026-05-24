@@ -146,9 +146,8 @@ public class DbBackupOrchestrationService {
         Path checksumPath = null;
         Path manifestPath = null;
         try {
-            Path tempDir = Path.of(backupService.backupDir());
-            Files.createDirectories(tempDir);
-            manifestPath = tempDir.resolve(manifestService.manifestFileName(batchId));
+            Path backupDir = Path.of(backupService.backupDir());
+            manifestPath = backupDir.resolve(manifestService.manifestFileName(batchId));
             try (FileOutputStream out = new FileOutputStream(manifestPath.toFile())) {
                 HiveOssTask task = HiveOssTask.createTask()
                         .withBucket(alibabaOssConfig.getBackupBucket())
@@ -169,8 +168,8 @@ public class DbBackupOrchestrationService {
             String checksumKey = toBackupObjectKey(checksumFileName);
             log.info("Restore keys resolved from manifest file names, batchId={}", batchId);
 
-            archivePath = tempDir.resolve(archiveFileName);
-            checksumPath = tempDir.resolve(checksumFileName);
+            archivePath = backupDir.resolve(archiveFileName);
+            checksumPath = backupDir.resolve(checksumFileName);
 
             try (FileOutputStream out = new FileOutputStream(archivePath.toFile())) {
                 HiveOssTask task = HiveOssTask.createTask()

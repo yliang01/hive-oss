@@ -31,8 +31,8 @@ public class HiveUploadService {
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
 
-    @Value("${hive.uploadTmpDir}")
-    private String uploadTmpDir;
+    @Value("${hive.imageCacheDir}")
+    private String imageCacheDir;
 
     public HiveUploadService(HiveRecordRepository hiveRecordRepository,
                              HiveOssService hiveOssService,
@@ -44,13 +44,13 @@ public class HiveUploadService {
 
     @PostConstruct
     public void init() throws IOException {
-        FileUtils.forceMkdir(new File(uploadTmpDir));
+        FileUtils.forceMkdir(new File(imageCacheDir));
     }
 
     /**
      * Upload file to OSS.
-     * Images (uiVariant == "image" with a supported format) are buffered to uploadTmpDir; thumbnail
-     * generation is submitted asynchronously and the upload returns without waiting for it.
+     * Images (uiVariant == "image" with a supported format) are written directly to imageCacheDir
+     * under a stable name, uploaded to OSS, then handed to ThumbnailAsyncService without a copy.
      * All other files are streamed directly without local buffering.
      */
     public String uploadStreaming(String bucketName, CategoryStorageClass storageClass,
@@ -100,12 +100,12 @@ public class HiveUploadService {
     private void doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
                                    CategoryStorageClass storageClass, boolean generateThumbnail,
                                    InputStream inputStream) throws Exception {
-        File tempFile = new File(uploadTmpDir, "hive-upload-" + System.nanoTime());
+        File cacheFile = new File(imageCacheDir, fileKey + "_src");
         try {
-            try (InputStream in = inputStream; FileOutputStream out = new FileOutputStream(tempFile)) {
+            try (InputStream in = inputStream; FileOutputStream out = new FileOutputStream(cacheFile)) {
                 IOUtils.copy(in, out);
             }
-            try (InputStream fileIn = new FileInputStream(tempFile)) {
+            try (InputStream fileIn = new FileInputStream(cacheFile)) {
                 HiveOssTask task = HiveOssTask.createTask()
                         .withBucket(hiveRecord.getBucketName())
                         .withKey(fileKey)
@@ -116,10 +116,11 @@ public class HiveUploadService {
             }
             markUploaded(hiveRecord, storageClass);
             if (generateThumbnail) {
-                thumbnailAsyncService.submitAsync(hiveRecord, fileKey, tempFile);
+                thumbnailAsyncService.submitAsync(hiveRecord, fileKey);
             }
-        } finally {
-            FileUtils.deleteQuietly(tempFile);
+        } catch (Exception e) {
+            FileUtils.deleteQuietly(cacheFile);
+            throw e;
         }
     }
 

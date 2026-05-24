@@ -8,8 +8,8 @@ spring:
 
 hive:
   downloadDir: C:\Users\YLiang\Downloads\hive\download\
-  uploadTmpDir: C:\Users\YLiang\Downloads\hive\upload-tmp\
-  thumbnailStagingDir: C:\Users\YLiang\Downloads\hive\thumbnail-staging\
+  imageCacheDir: ./data/image-cache
+  imageCacheTtlDays: 7
   h2:
     server:
       enabled: true

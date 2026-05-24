@@ -3,6 +3,7 @@ package cc.cc3c.hive.oss.controller;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.FileGroupRecordRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.FileGroupAssignRequest;
@@ -11,6 +12,7 @@ import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveSyncService;
+import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -25,23 +27,29 @@ public class HiveFileSyncController {
 
     private final HiveRecordRepository hiveRecordRepository;
     private final HiveRecordImageMetaRepository imageMetaRepository;
+    private final FileGroupRecordRepository fileGroupRecordRepository;
     private final FileGroupService fileGroupService;
     private final HiveSyncService hiveSyncService;
     private final HiveOssService hiveOssService;
     private final FileCategoryResolver fileCategoryResolver;
+    private final ThumbnailAsyncService thumbnailAsyncService;
 
     public HiveFileSyncController(HiveRecordRepository hiveRecordRepository,
                                    HiveRecordImageMetaRepository imageMetaRepository,
+                                   FileGroupRecordRepository fileGroupRecordRepository,
                                    FileGroupService fileGroupService,
                                    HiveSyncService hiveSyncService,
                                    HiveOssService hiveOssService,
-                                   FileCategoryResolver fileCategoryResolver) {
+                                   FileCategoryResolver fileCategoryResolver,
+                                   ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
+        this.fileGroupRecordRepository = fileGroupRecordRepository;
         this.fileGroupService = fileGroupService;
         this.hiveSyncService = hiveSyncService;
         this.hiveOssService = hiveOssService;
         this.fileCategoryResolver = fileCategoryResolver;
+        this.thumbnailAsyncService = thumbnailAsyncService;
     }
 
     @PostMapping("/categories/{category}/files/sync-remote")
@@ -87,6 +95,8 @@ public class HiveFileSyncController {
                 log.error("failed to delete {}", hiveOssTask);
                 return ResponseEntity.internalServerError().build();
             }
+            fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
+            thumbnailAsyncService.deleteCacheFiles(record.getFileKey());
             record.setDeleted(true);
             hiveRecordRepository.save(record);
         }
