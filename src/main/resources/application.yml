@@ -1,4 +1,4 @@
-spring.config.import: classpath:external-secret.yml
+spring.config.import: optional:file:./config/external-secret.yml
 spring.profiles.active: prod
 
 spring:
