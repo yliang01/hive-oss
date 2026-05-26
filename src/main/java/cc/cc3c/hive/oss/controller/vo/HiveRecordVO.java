@@ -21,8 +21,11 @@ public class HiveRecordVO {
     private String status;
     private LocalDateTime updateTime;
     private LocalDateTime unfreezeTime;
+    private String unfreezeStatus;
     private Boolean restorable;
     private Boolean downloadable;
+    private String downloadStatus;
+    private Integer downloadProgress;
     private String localPath;
     private Boolean localPathExists;
     private Boolean deletable;

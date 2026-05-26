@@ -7,9 +7,11 @@ import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.model.HiveRestoreStatusState;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
+import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -66,6 +68,8 @@ public class HiveRecordVOAssembler {
         CategoryStorageClass storageClass = fileCategoryResolver.resolveRecordStorageClass(record);
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
+        HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
+                ? hiveDownloadService.getDownLoadTask(record.getFileKey()) : null;
         FileCategoryEntity finalCategory = category != null
                 ? fileCategoryResolver.resolveCategory(category)
                 : fileCategoryResolver.resolveFallbackCategory(record);
@@ -99,8 +103,11 @@ public class HiveRecordVOAssembler {
                 .status(record.getStatus().name())
                 .updateTime(record.getUpdateTime())
                 .unfreezeTime(record.getRestoreTime())
+                .unfreezeStatus(resolveUnfreezeStatus(record).name())
                 .restorable(restorable)
                 .downloadable(downloadable)
+                .downloadStatus(record.getDownloadStatus() == null ? null : record.getDownloadStatus().name())
+                .downloadProgress(downloadTask == null ? null : downloadTask.getProgress())
                 .localPath(localPath)
                 .localPathExists(localPathExists)
                 .deletable(record.getDeletable())
@@ -120,6 +127,22 @@ public class HiveRecordVOAssembler {
     public boolean isRestorable(HiveRecord record) {
         return isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))
                 && (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
+    }
+
+    private HiveRestoreStatusState resolveUnfreezeStatus(HiveRecord record) {
+        if (!isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))) {
+            return HiveRestoreStatusState.NOT_STARTED;
+        }
+        if (record.getRestoreTime() != null && record.getRestoreTime().isAfter(LocalDateTime.now())) {
+            return HiveRestoreStatusState.COMPLETED;
+        }
+        if (record.getRestoreStatus() == HiveRestoreStatusState.IN_PROGRESS) {
+            return HiveRestoreStatusState.IN_PROGRESS;
+        }
+        if (record.getRestoreStatus() == HiveRestoreStatusState.FAILED) {
+            return HiveRestoreStatusState.FAILED;
+        }
+        return HiveRestoreStatusState.NOT_STARTED;
     }
 
     public boolean isArchiveStorageClass(CategoryStorageClass storageClass) {

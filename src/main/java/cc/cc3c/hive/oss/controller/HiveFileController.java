@@ -2,6 +2,7 @@ package cc.cc3c.hive.oss.controller;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
+import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
@@ -43,18 +44,23 @@ public class HiveFileController {
         this.assembler = assembler;
     }
 
-    @GetMapping("/categories/{category}/files/{*fileKey}")
-    public ResponseEntity<HiveRecordVO> getFile(@PathVariable("category") String category,
-                                                @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
+    @GetMapping("/categories/{category}/files:batch-get")
+    public ResponseEntity<List<HiveRecordVO>> batchGetFiles(@PathVariable("category") String category,
+                                                            @RequestParam("fileKeys") List<String> fileKeys) {
+        if (fileKeys == null || fileKeys.isEmpty()) {
+            return ResponseEntity.badRequest().build();
         }
-        HiveRecord record = optional.get();
-        Optional<HiveRecordImageMeta> imageMeta = imageMetaRepository.findByHiveRecordId(record.getId());
-        return ResponseEntity.ok(assembler.buildHiveRecordVO(record, category, null, imageMeta));
+        String bucketName = fileGroupService.resolveBucket(category);
+        List<String> normalizedKeys = fileKeys.stream()
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        if (normalizedKeys.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<HiveRecord> records = hiveRecordRepository
+                .findByBucketNameAndFileKeyInAndDeletedIsFalse(bucketName, normalizedKeys);
+        return ResponseEntity.ok(buildRecordVOs(category, records));
     }
 
     @GetMapping("/categories/{category}/files")
@@ -122,16 +128,23 @@ public class HiveFileController {
             pageResult = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(pageable, bucketName);
         }
 
-        Map<Integer, cc.cc3c.hive.domain.entity.FileGroupRecord> groupRecordMap =
-                fileGroupService.findGroupRecordMapByRecordIds(pageResult.stream().map(HiveRecord::getId).toList());
-        List<Integer> recordIds = pageResult.stream().map(HiveRecord::getId).toList();
+        List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
+        return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
+    }
+
+    private List<HiveRecordVO> buildRecordVOs(String category, List<HiveRecord> records) {
+        if (records.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
+        Map<Integer, FileGroupRecord> groupRecordMap =
+                fileGroupService.findGroupRecordMapByRecordIds(recordIds);
         Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
                 .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
-        List<HiveRecordVO> list = pageResult.stream()
+        return records.stream()
                 .map(record -> assembler.buildHiveRecordVO(record, category,
                         groupRecordMap.get(record.getId()),
                         Optional.ofNullable(imageMetaMap.get(record.getId()))))
                 .toList();
-        return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
     }
 }

@@ -14,12 +14,12 @@
 | `files.js` | `GET /categories/{category}/groups` | fetch | `HiveOssController#getGroups` | 保留 |
 | `files.js` | `GET /categories/{category}/files` | fetch | `HiveOssController#getFiles` | 保留 |
 | `files.js` | `GET /categories/{category}/files/search` | fetch | `HiveOssController#searchFiles` | 保留 |
-| `files.js` | `GET /categories/{category}/files/{fileKey}` | fetch | `HiveOssController#getFile` | 保留 |
+| Vue `files.ts` | `GET /categories/{category}/files:batch-get?fileKeys=...` | axios | `HiveFileController#batchGetFiles` | 保留；操作后批量刷新记录状态 |
 | `files.js` | `POST /categories/{category}/files/download-task/{fileKey}` | fetch | `HiveOssController#downloadTask` | 保留 |
 | `files.js` | `GET /categories/{category}/files/download-task-status/{fileKey}` | fetch | `HiveOssController#downloadTaskStatus` | 保留，需补齐 `downloadUrl` |
 | `files.js` | `POST /categories/{category}/groups/{groupId}/files:assign` | fetch | `HiveOssController#assignFilesToGroup` | 保留（主接口） |
 | `files.js` | `POST /categories/{category}/groups/{groupId}/files:move` | fetch | `HiveOssController#moveFilesToGroup` | 冗余，前端改为调用 `assign` |
-| `files.js` | `DELETE /categories/{category}/files/{fileKey}` | fetch | `HiveOssController#deleteFiles` | 保留 |
+| Vue `files.ts` | `POST /categories/{category}/files:mark-delete` | axios | `HiveFileController#bulkMarkDelete` | 保留；文件删除统一走选中后批量标记 |
 | `files.js` | `POST /categories/{category}/files/confirm-delete` | fetch | `HiveOssController#syncLocal` | 保留 |
 | `files.js` | `POST /categories/{category}/files/sync-remote` | fetch | `HiveOssController#syncRemote` | 保留 |
 | `files.js` | `POST /categories/{category}/files/unfreeze/{fileKey}` | fetch | `HiveOssController#unfreezeFiles` | 保留 |
@@ -38,6 +38,14 @@
 | `category-admin.js` | `DELETE /category-admin/categories/{categoryCode}/groups/{groupId}` | fetch | `CategoryAdminController#deleteGroup` | 保留 |
 
 ## 冗余与下线候选
+
+### 0) 已下线/不再恢复
+
+- `DELETE /categories/{category}/files/{fileKey}`
+  - 文件管理页不再提供单条记录删除入口；所有分类统一使用选中后批量标记删除。
+  - 当前后端 active controller 中没有该 handler；不要为前端重新添加单文件删除 API。
+- `GET /categories/{category}/files/{fileKey}`
+  - 已由 `GET /categories/{category}/files:batch-get?fileKeys=...` 替代；前端状态刷新不再逐条查询。
 
 ### 1) 高优先级
 

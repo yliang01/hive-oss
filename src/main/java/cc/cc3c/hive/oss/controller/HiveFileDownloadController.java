@@ -60,6 +60,7 @@ public class HiveFileDownloadController {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
+        hiveDownloadService.reconcileStaleDownloading(hiveRecord);
         if (hiveRecord.getDownloadStatus() == null) {
             return ResponseEntity.badRequest().build();
         }

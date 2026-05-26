@@ -23,6 +23,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -73,11 +75,24 @@ public class HiveDownloadService {
         return downloadTasks.get(fileKey);
     }
 
+    public void reconcileStaleDownloading(HiveRecord hiveRecord) {
+        if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()
+                && !downloadTasks.containsKey(hiveRecord.getFileKey())) {
+            FileUtils.deleteQuietly(getDownloadPartFile(hiveRecord));
+            hiveRecordRepository.updateDownloadStatus(hiveRecord.getFileKey(), HiveDownloadStatus.failed);
+            hiveRecord.setDownloadStatus(HiveDownloadStatus.failed);
+        }
+    }
+
     public void download(HiveRecord hiveRecord) throws Exception {
+        reconcileStaleDownloading(hiveRecord);
         if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()) {
             return;
         }
-        HiveOssTask task = createOutputTask(hiveRecord, new FileOutputStream(getDownloadFile(hiveRecord)));
+        File targetFile = getDownloadFile(hiveRecord);
+        File partFile = getDownloadPartFile(hiveRecord);
+        FileUtils.deleteQuietly(partFile);
+        HiveOssTask task = createOutputTask(hiveRecord, new FileOutputStream(partFile));
         log.info("download start {}", task);
         hiveRecordRepository.updateDownloadStatus(task.getKey(), HiveDownloadStatus.downloading);
         downloadTasks.put(task.getKey(), task);
@@ -85,10 +100,12 @@ public class HiveDownloadService {
         Thread.ofVirtual().start(() -> {
             try {
                 hiveOssService.using(hiveRecord.getProvider()).download(finalTask);
+                Files.move(partFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 hiveRecordRepository.updateDownloadStatus(finalTask.getKey(), HiveDownloadStatus.success);
                 log.info("download finished {}", finalTask);
             } catch (Exception e) {
                 log.error("download failed {}", finalTask, e);
+                FileUtils.deleteQuietly(partFile);
                 hiveRecordRepository.updateDownloadStatus(finalTask.getKey(), HiveDownloadStatus.failed);
             } finally {
                 downloadTasks.remove(finalTask.getKey());
@@ -177,5 +194,9 @@ public class HiveDownloadService {
             fileName = hiveRecord.getFileKey();
         }
         return new File(downloadFolder, hiveRecord.getZipped() ? fileName + ".zip" : fileName);
+    }
+
+    private File getDownloadPartFile(HiveRecord hiveRecord) {
+        return new File(getDownloadFile(hiveRecord).getAbsolutePath() + ".part");
     }
 }

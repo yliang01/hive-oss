@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS hive_record (
     deletable       BOOLEAN,
     deleted         BOOLEAN DEFAULT FALSE,
     restore_time    TIMESTAMP,
+    restore_status  VARCHAR(32),
+    restore_requested_at TIMESTAMP,
+    restore_status_updated_at TIMESTAMP,
     download_status VARCHAR(32)
 );
 

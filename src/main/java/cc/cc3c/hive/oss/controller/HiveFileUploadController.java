@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Map;
 
 @Slf4j
@@ -45,18 +46,24 @@ public class HiveFileUploadController {
     public ResponseEntity<?> upload(@PathVariable("category") String category, HttpServletRequest request) throws IOException {
         String bucketName = fileGroupService.resolveBucket(category);
         CategoryStorageClass storageClass = fileCategoryResolver.resolveStorageClass(category);
-        JakartaServletFileUpload<?, ?> upload = new JakartaServletFileUpload<>();
-        FileItemInputIterator iter = upload.getItemIterator(request);
-        if (!iter.hasNext()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "请上传一个文件"));
-        }
-        FileItemInput item = iter.next();
-        if (item.isFormField()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "需要文件类型 part，不能是表单字段"));
-        }
         try {
+            JakartaServletFileUpload<?, ?> upload = new JakartaServletFileUpload<>();
+            FileItemInputIterator iter = upload.getItemIterator(request);
             var cat = fileCategoryResolver.resolveCategory(category);
-            String fileKey = hiveUploadService.uploadStreaming(bucketName, storageClass, cat.getUiVariant(), item.getName(), item.getInputStream());
+
+            String fileKey = null;
+            while (iter.hasNext()) {
+                FileItemInput item = iter.next();
+                if (item.isFormField() || fileKey != null) {
+                    item.getInputStream().transferTo(OutputStream.nullOutputStream());
+                    continue;
+                }
+                fileKey = hiveUploadService.uploadStreaming(bucketName, storageClass, cat.getUiVariant(), item.getName(), item.getInputStream());
+            }
+
+            if (fileKey == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "请上传一个文件"));
+            }
             return ResponseEntity.ok(HiveUploadVO.builder().fileKey(fileKey).build());
         } catch (UploadAlreadyInProgressException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));

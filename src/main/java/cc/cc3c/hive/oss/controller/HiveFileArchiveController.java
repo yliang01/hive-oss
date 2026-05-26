@@ -1,7 +1,9 @@
 package cc.cc3c.hive.oss.controller;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.model.HiveRestoreStatusState;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
+import cc.cc3c.hive.oss.controller.vo.HiveUnfreezeStatusVO;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveOssService;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.ZoneId;
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 
@@ -38,60 +41,79 @@ public class HiveFileArchiveController {
     }
 
     @PostMapping("/categories/{category}/files/unfreeze/{*fileKey}")
-    public ResponseEntity<Void> unfreezeFiles(@PathVariable("category") String category,
-                                               @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<HiveUnfreezeStatusVO> unfreezeFiles(@PathVariable("category") String category,
+                                                              @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = findArchiveRecord(category, fileKey);
+        if (optional.isEmpty()) return ResponseEntity.notFound().build();
         HiveRecord hiveRecord = optional.get();
-        if (!assembler.isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) {
-            return ResponseEntity.badRequest().build();
-        }
+        if (!assembler.isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) return ResponseEntity.badRequest().build();
+
+        fileKey = hiveRecord.getFileKey();
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getProvider())
                 .restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getBucketName()));
         if (HiveRestoreStatus.NOT_STARTED == restoreResult.getRestoreStatus()) {
             hiveOssService.using(hiveRecord.getProvider())
                     .restore(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getBucketName()));
-            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.IN_PROGRESS, true, null);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(buildStatus(hiveRecord));
         } else if (HiveRestoreStatus.IN_PROGRESS == restoreResult.getRestoreStatus()) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.IN_PROGRESS, false, null);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(buildStatus(hiveRecord));
         } else if (HiveRestoreStatus.COMPLETED == restoreResult.getRestoreStatus()) {
-            ZonedDateTime converted = restoreResult.getExpiryDate().withZoneSameInstant(ZoneId.systemDefault());
-            hiveRecord.setRestoreTime(converted.toLocalDateTime());
-            hiveRecordRepository.save(hiveRecord);
-            return ResponseEntity.ok().build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.COMPLETED, false, restoreResult);
+            return ResponseEntity.ok(buildStatus(hiveRecord));
         }
         return ResponseEntity.internalServerError().build();
     }
 
     @GetMapping("/categories/{category}/files/unfreeze-status/{*fileKey}")
-    public ResponseEntity<Void> unfreezeState(@PathVariable("category") String category,
-                                               @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+    public ResponseEntity<HiveUnfreezeStatusVO> unfreezeState(@PathVariable("category") String category,
+                                                              @PathVariable("fileKey") String fileKey) {
+        Optional<HiveRecord> optional = findArchiveRecord(category, fileKey);
+        if (optional.isEmpty()) return ResponseEntity.notFound().build();
         HiveRecord hiveRecord = optional.get();
-        if (!assembler.isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) {
-            return ResponseEntity.badRequest().build();
-        }
+        if (!assembler.isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(hiveRecord))) return ResponseEntity.badRequest().build();
+
+        fileKey = hiveRecord.getFileKey();
         HiveRestoreResult restoreResult = hiveOssService.using(hiveRecord.getProvider())
                 .restoreCheck(HiveOssTask.createTask().withKey(fileKey).withBucket(hiveRecord.getBucketName()));
         if (HiveRestoreStatus.NOT_STARTED == restoreResult.getRestoreStatus()) {
-            return ResponseEntity.badRequest().build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.NOT_STARTED, false, null);
+            return ResponseEntity.ok(buildStatus(hiveRecord));
         } else if (HiveRestoreStatus.IN_PROGRESS == restoreResult.getRestoreStatus()) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.IN_PROGRESS, false, null);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(buildStatus(hiveRecord));
         } else if (HiveRestoreStatus.COMPLETED == restoreResult.getRestoreStatus()) {
-            ZonedDateTime converted = restoreResult.getExpiryDate().withZoneSameInstant(ZoneId.systemDefault());
-            hiveRecord.setRestoreTime(converted.toLocalDateTime());
-            hiveRecordRepository.save(hiveRecord);
-            return ResponseEntity.ok().build();
+            markRestoreStatus(hiveRecord, HiveRestoreStatusState.COMPLETED, false, restoreResult);
+            return ResponseEntity.ok(buildStatus(hiveRecord));
         }
         return ResponseEntity.internalServerError().build();
+    }
+
+    private Optional<HiveRecord> findArchiveRecord(String category, String fileKey) {
+        String normalized = HiveRecordVOAssembler.normalizeFileKey(fileKey);
+        return hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
+                fileGroupService.resolveBucket(category), normalized);
+    }
+
+    private void markRestoreStatus(HiveRecord hiveRecord, HiveRestoreStatusState status,
+                                   boolean requested, HiveRestoreResult restoreResult) {
+        hiveRecord.setRestoreStatus(status);
+        if (requested) hiveRecord.setRestoreRequestedAt(LocalDateTime.now());
+        hiveRecord.setRestoreStatusUpdatedAt(LocalDateTime.now());
+        if (status == HiveRestoreStatusState.COMPLETED && restoreResult != null && restoreResult.getExpiryDate() != null) {
+            ZonedDateTime converted = restoreResult.getExpiryDate().withZoneSameInstant(ZoneId.systemDefault());
+            hiveRecord.setRestoreTime(converted.toLocalDateTime());
+        }
+        hiveRecordRepository.save(hiveRecord);
+    }
+
+    private HiveUnfreezeStatusVO buildStatus(HiveRecord hiveRecord) {
+        HiveRestoreStatusState status = hiveRecord.getRestoreStatus() == null
+                ? HiveRestoreStatusState.NOT_STARTED : hiveRecord.getRestoreStatus();
+        return HiveUnfreezeStatusVO.builder()
+                .status(status.name())
+                .unfreezeTime(hiveRecord.getRestoreTime())
+                .build();
     }
 }
