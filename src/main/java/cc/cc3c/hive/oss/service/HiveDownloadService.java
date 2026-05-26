@@ -96,8 +96,10 @@ public class HiveDownloadService {
         });
     }
 
-    public void streamPreview(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
-        if (thumbnailGeneratorService.isSupportedImage(hiveRecord.getFileName())) {
+    public void streamPreview(HiveRecord hiveRecord, OutputStream outputStream, String uiVariant) throws Exception {
+        boolean useCache = "image".equalsIgnoreCase(uiVariant)
+                && thumbnailGeneratorService.isSupportedImage(hiveRecord.getFileName());
+        if (useCache) {
             String fileKey = hiveRecord.getFileKey();
             File cacheFile = new File(imageCacheDir, fileKey + "_src");
             if (!cacheFile.isFile()) {

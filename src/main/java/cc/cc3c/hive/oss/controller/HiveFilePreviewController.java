@@ -94,7 +94,7 @@ public class HiveFilePreviewController {
         String fileName = StringUtils.defaultIfBlank(hiveRecord.getFileName(), hiveRecord.getFileKey());
         StreamingResponseBody body = outputStream -> {
             try {
-                hiveDownloadService.streamPreview(hiveRecord, outputStream);
+                hiveDownloadService.streamPreview(hiveRecord, outputStream, uiVariant);
             } catch (Exception e) {
                 log.error("preview stream failed {}", key, e);
                 throw new IOException("preview stream failed", e);

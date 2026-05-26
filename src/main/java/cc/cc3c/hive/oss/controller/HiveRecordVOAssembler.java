@@ -28,6 +28,7 @@ public class HiveRecordVOAssembler {
     static final String PREVIEW_BLOCKED_TOO_LARGE = "TOO_LARGE";
     static final String PREVIEW_BLOCKED_UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
     static final String PREVIEW_BLOCKED_OSS_ONLY = "OSS_ONLY";
+    static final String PREVIEW_BLOCKED_ARCHIVE = "ARCHIVE";
     static final Map<String, String> MIME_BY_EXTENSION = Map.of(
             "jpg",  MediaType.IMAGE_JPEG_VALUE,
             "jpeg", MediaType.IMAGE_JPEG_VALUE,
@@ -126,6 +127,9 @@ public class HiveRecordVOAssembler {
     }
 
     public PreviewDecision evaluatePreview(HiveRecord record, String uiVariant) {
+        if ("archive".equals(uiVariant)) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_ARCHIVE);
+        }
         if (HiveRecordStatus.OSS_ONLY.equals(record.getStatus())) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
         }
