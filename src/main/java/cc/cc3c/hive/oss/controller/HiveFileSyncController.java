@@ -24,7 +24,7 @@ public class HiveFileSyncController {
             HiveSyncVO hiveSyncVO = hiveSyncService.syncRemote(category.categoryId(), category.bucketName(), category.storageClass());
             return ResponseEntity.ok(hiveSyncVO);
         } catch (Exception e) {
-            log.error("sync remote failed {}", category.requestedCode(), e);
+            log.error("sync remote failed {}", category.code(), e);
             return ResponseEntity.internalServerError().build();
         }
     }

@@ -1,7 +1,6 @@
 package cc.cc3c.hive.oss.web;
 
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
-import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
@@ -27,7 +26,7 @@ public class CategoryContextFactory {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "bucket name not configured for category: " + requestedCode);
         }
-        return new CategoryContext(category.getCode(), category.getId(),
+        return new CategoryContext(category.getId(), category.getCode(), category.getName(),
                 category.getBucketName(), category.getStorageClass(), category.getUiVariant());
     }
 }

@@ -65,7 +65,7 @@ public class HiveFileController {
         }
         List<HiveRecord> records = hiveRecordRepository
                 .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
-        return ResponseEntity.ok(buildRecordVOs(category.code(), records));
+        return ResponseEntity.ok(buildRecordVOs(category, records));
     }
 
     @GetMapping("/categories/{category}/files")
@@ -111,11 +111,11 @@ public class HiveFileController {
             pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(pageable, categoryId);
         }
 
-        List<HiveRecordVO> list = buildRecordVOs(category.code(), pageResult.stream().toList());
+        List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
     }
 
-    private List<HiveRecordVO> buildRecordVOs(String category, List<HiveRecord> records) {
+    private List<HiveRecordVO> buildRecordVOs(CategoryContext context, List<HiveRecord> records) {
         if (records.isEmpty()) {
             return List.of();
         }
@@ -125,7 +125,7 @@ public class HiveFileController {
         Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
                 .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
         return records.stream()
-                .map(record -> assembler.buildHiveRecordVO(record, category,
+                .map(record -> assembler.buildHiveRecordVO(record, context,
                         groupRecordMap.get(record.getId()),
                         Optional.ofNullable(imageMetaMap.get(record.getId()))))
                 .toList();

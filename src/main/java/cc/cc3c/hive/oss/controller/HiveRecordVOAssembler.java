@@ -12,6 +12,8 @@ import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import cc.cc3c.hive.oss.web.CategoryContext;
+import cc.cc3c.hive.oss.web.CategoryFileContext;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -64,35 +66,29 @@ public class HiveRecordVOAssembler {
         this.previewMaxSizeBytes = previewMaxSizeBytes;
     }
 
-    public HiveRecordVO buildHiveRecordVO(HiveRecord record, String category, FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
+    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
         CategoryStorageClass storageClass = fileCategoryResolver.resolveRecordStorageClass(record);
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
                 ? hiveDownloadService.getDownLoadTask(record) : null;
-        FileCategoryEntity finalCategory = category != null
-                ? fileCategoryResolver.resolveCategory(category)
-                : fileCategoryResolver.resolveFallbackCategory(record);
-        String uiVariant = finalCategory == null ? null : finalCategory.getUiVariant();
-        PreviewDecision previewDecision = evaluatePreview(record, uiVariant);
-
-        File downloadFile = hiveDownloadService.getDownloadFile(record);
+        PreviewDecision previewDecision = evaluatePreview(record, context.uiVariant());
+        File downloadFile = hiveDownloadService.getDownloadFile(record.getZipped(), record.getFileName());
         String localPath = record.getDownloadStatus() != null && record.getDownloadStatus() == HiveDownloadStatus.success
                 ? downloadFile.toURI().toString().replaceFirst("^file:/", "file:///") : null;
         Boolean localPathExists = null;
         if (StringUtils.isNotEmpty(localPath)) {
             localPathExists = downloadFile.exists();
         }
-        String finalCategoryCode = finalCategory == null ? null : finalCategory.getCode();
-        String previewUrl = previewDecision.previewable() && finalCategoryCode != null
-                ? "/categories/" + finalCategoryCode + "/files/preview/" + record.getFileKey() : null;
+        String previewUrl = previewDecision.previewable()
+                ? "/categories/" + context.code() + "/files/preview/" + record.getFileKey() : null;
         boolean thumbReady = imageMeta.map(m -> "READY".equals(m.getThumbStatus()) && StringUtils.isNotBlank(m.getThumbKey())).orElse(false);
-        String thumbnailUrl = thumbReady && finalCategoryCode != null
-                ? "/categories/" + finalCategoryCode + "/files/preview/thumbnail/" + record.getFileKey() : null;
+        String thumbnailUrl = thumbReady
+                ? "/categories/" + context.code() + "/files/preview/thumbnail/" + record.getFileKey() : null;
         return HiveRecordVO.builder()
-                .category(finalCategoryCode)
-                .categoryLabel(finalCategory == null ? null : finalCategory.getName())
-                .uiVariant(finalCategory == null ? null : finalCategory.getUiVariant())
+                .category(context.code())
+                .categoryLabel(context.name())
+                .uiVariant(context.uiVariant())
                 .groupId(groupRecord == null ? null : groupRecord.getGroup().getId())
                 .groupName(groupRecord == null ? null : groupRecord.getGroup().getGroupName())
                 .fileName(record.getFileName())
@@ -127,6 +123,11 @@ public class HiveRecordVOAssembler {
     public boolean isRestorable(HiveRecord record) {
         return isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))
                 && (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
+    }
+
+    public boolean isRestorable(CategoryFileContext file) {
+        return isArchiveStorageClass(file.category().storageClass())
+                && (file.restoreTime() == null || file.restoreTime().isBefore(LocalDateTime.now()));
     }
 
     private HiveRestoreStatusState resolveUnfreezeStatus(HiveRecord record) {
@@ -169,6 +170,27 @@ public class HiveRecordVOAssembler {
         return PreviewDecision.allowed(mimeType);
     }
 
+    public PreviewDecision evaluatePreview(CategoryFileContext file) {
+        String uiVariant = file.category().uiVariant();
+        if ("archive".equals(uiVariant)) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_ARCHIVE);
+        }
+        if (HiveRecordStatus.OSS_ONLY.equals(file.status())) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
+        }
+        if (isRestorable(file)) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_FROZEN);
+        }
+        if (file.size() != null && previewMaxSizeBytes > 0 && file.size() > previewMaxSizeBytes) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_TOO_LARGE);
+        }
+        String mimeType = detectPreviewMimeType(file.fileName(), uiVariant);
+        if (mimeType == null) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_UNSUPPORTED_TYPE);
+        }
+        return PreviewDecision.allowed(mimeType);
+    }
+
     public String detectPreviewMimeType(String fileName, String uiVariant) {
         if (StringUtils.isBlank(fileName)) {
             return null;
@@ -183,13 +205,5 @@ public class HiveRecordVOAssembler {
             mime = FILE_MIME_BY_EXTENSION.get(extension);
         }
         return mime;
-    }
-
-    /** Normalize {*fileKey} path variable — strips leading slash if present. */
-    public static String normalizeFileKey(String fileKey) {
-        if (fileKey == null) {
-            return null;
-        }
-        return fileKey.startsWith("/") ? fileKey.substring(1) : fileKey;
     }
 }

@@ -18,12 +18,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,9 +36,9 @@ public class HiveDownloadService {
     private String imageCacheDir;
 
     public HiveDownloadService(HiveRecordRepository hiveRecordRepository,
-                              HiveRecordImageMetaRepository imageMetaRepository,
-                              HiveOssService hiveOssService,
-                              ThumbnailGeneratorService thumbnailGeneratorService) {
+                               HiveRecordImageMetaRepository imageMetaRepository,
+                               HiveOssService hiveOssService,
+                               ThumbnailGeneratorService thumbnailGeneratorService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
         this.hiveOssService = hiveOssService;
@@ -80,47 +75,33 @@ public class HiveDownloadService {
         return downloadTasks.get(taskMapKey(file));
     }
 
-    public void releaseLocalStatus(Long categoryId, String fileKey) {
-        hiveRecordRepository.updateDownloadStatus(categoryId, fileKey, null);
-    }
-
-    public void reconcileStaleDownloading(HiveRecord hiveRecord) {
-        if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()
-                && !downloadTasks.containsKey(taskMapKey(hiveRecord))) {
-            FileUtils.deleteQuietly(getDownloadPartFile(hiveRecord));
-            hiveRecordRepository.updateDownloadStatus(hiveRecord.getCategory().getId(), hiveRecord.getFileKey(), HiveDownloadStatus.failed);
-            hiveRecord.setDownloadStatus(HiveDownloadStatus.failed);
-        }
-    }
-
-    public HiveDownloadStatus reconcileStaleDownloading(CategoryFileContext file) {
-        if (HiveDownloadStatus.downloading == file.downloadStatus()
-                && !downloadTasks.containsKey(taskMapKey(file))) {
-            FileUtils.deleteQuietly(getDownloadPartFile(file));
-            hiveRecordRepository.updateDownloadStatus(file.category().categoryId(), file.key(), HiveDownloadStatus.failed);
+    public HiveDownloadStatus reconcileStaleDownloading(CategoryFileContext context) {
+        if (HiveDownloadStatus.downloading == context.downloadStatus()
+                && !downloadTasks.containsKey(taskMapKey(context))) {
+            FileUtils.deleteQuietly(getDownloadPartFile(context.zipped(), context.fileName()));
+            hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), HiveDownloadStatus.failed);
             return HiveDownloadStatus.failed;
         }
-        return file.downloadStatus();
+        return context.downloadStatus();
     }
 
-    public void download(HiveRecord hiveRecord) throws Exception {
-        reconcileStaleDownloading(hiveRecord);
-        if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()) {
+    public void download(CategoryFileContext context) throws Exception {
+        if (HiveDownloadStatus.downloading == context.downloadStatus()) {
             return;
         }
-        File targetFile = getDownloadFile(hiveRecord);
-        File partFile = getDownloadPartFile(hiveRecord);
+        File targetFile = getDownloadFile(context.zipped(), context.fileName());
+        File partFile = getDownloadPartFile(context.zipped(), context.fileName());
         FileUtils.deleteQuietly(partFile);
-        HiveOssTask task = createOutputTask(hiveRecord, new FileOutputStream(partFile));
+        HiveOssTask task = createOutputTask(context, new FileOutputStream(partFile));
         log.info("download start {}", task);
-        String taskMapKey = taskMapKey(hiveRecord);
-        Long categoryId = hiveRecord.getCategory().getId();
+        String taskMapKey = taskMapKey(context);
+        Long categoryId = context.category().categoryId();
         hiveRecordRepository.updateDownloadStatus(categoryId, task.getKey(), HiveDownloadStatus.downloading);
         downloadTasks.put(taskMapKey, task);
         HiveOssTask finalTask = task;
         Thread.ofVirtual().start(() -> {
             try {
-                hiveOssService.using(hiveRecord.getProvider()).download(finalTask);
+                hiveOssService.using(context.provider()).download(finalTask);
                 Files.move(partFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.success);
                 log.info("download finished {}", finalTask);
@@ -132,65 +113,6 @@ public class HiveDownloadService {
                 downloadTasks.remove(taskMapKey);
             }
         });
-    }
-
-    public void download(CategoryFileContext file) throws Exception {
-        reconcileStaleDownloading(file);
-        if (HiveDownloadStatus.downloading == file.downloadStatus()) {
-            return;
-        }
-        File targetFile = getDownloadFile(file);
-        File partFile = getDownloadPartFile(file);
-        FileUtils.deleteQuietly(partFile);
-        HiveOssTask task = createOutputTask(file, new FileOutputStream(partFile));
-        log.info("download start {}", task);
-        String taskMapKey = taskMapKey(file);
-        Long categoryId = file.category().categoryId();
-        hiveRecordRepository.updateDownloadStatus(categoryId, task.getKey(), HiveDownloadStatus.downloading);
-        downloadTasks.put(taskMapKey, task);
-        HiveOssTask finalTask = task;
-        Thread.ofVirtual().start(() -> {
-            try {
-                hiveOssService.using(file.provider()).download(finalTask);
-                Files.move(partFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.success);
-                log.info("download finished {}", finalTask);
-            } catch (Exception e) {
-                log.error("download failed {}", finalTask, e);
-                FileUtils.deleteQuietly(partFile);
-                hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.failed);
-            } finally {
-                downloadTasks.remove(taskMapKey);
-            }
-        });
-    }
-
-    public void streamPreview(HiveRecord hiveRecord, OutputStream outputStream, String uiVariant) throws Exception {
-        boolean useCache = "image".equalsIgnoreCase(uiVariant)
-                && thumbnailGeneratorService.isSupportedImage(hiveRecord.getFileName());
-        if (useCache) {
-            String fileKey = hiveRecord.getFileKey();
-            File cacheFile = new File(imageCacheDir, fileKey + "_src");
-            if (!cacheFile.isFile()) {
-                File tmpFile = new File(imageCacheDir, fileKey + "_src.tmp");
-                try {
-                    try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
-                        HiveOssTask task = createOutputTask(hiveRecord, fos);
-                        hiveOssService.using(hiveRecord.getProvider()).download(task);
-                    }
-                    tmpFile.renameTo(cacheFile);
-                } catch (Exception e) {
-                    FileUtils.deleteQuietly(tmpFile);
-                    throw e;
-                }
-            }
-            try (InputStream in = new FileInputStream(cacheFile)) {
-                IOUtils.copy(in, outputStream);
-            }
-            return;
-        }
-        HiveOssTask task = createOutputTask(hiveRecord, outputStream);
-        hiveOssService.using(hiveRecord.getProvider()).download(task);
     }
 
     public void streamPreview(CategoryFileContext file, OutputStream outputStream, String uiVariant) throws Exception {
@@ -218,40 +140,6 @@ public class HiveDownloadService {
         }
         HiveOssTask task = createOutputTask(file, outputStream);
         hiveOssService.using(file.provider()).download(task);
-    }
-
-    /**
-     * Stream thumbnail image (decrypted). Cache-first: serves from local _thumb if present,
-     * otherwise downloads from OSS and caches before serving.
-     */
-    public void streamPreviewThumbnail(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
-        String fileKey = hiveRecord.getFileKey();
-        File cacheFile = new File(imageCacheDir, fileKey + "_thumb");
-        if (!cacheFile.isFile()) {
-            HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(hiveRecord.getId()).orElse(null);
-            if (meta == null || !"READY".equals(meta.getThumbStatus()) || StringUtils.isBlank(meta.getThumbKey())) {
-                throw new IllegalArgumentException("no thumbnail key for record");
-            }
-            String thumbFileName = ThumbnailKeyHelper.thumbFileNameForEncryption(fileKey);
-            File tmpFile = new File(imageCacheDir, fileKey + "_thumb.tmp");
-            try {
-                try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
-                    HiveOssTask task = HiveOssTask.createTask()
-                            .withBucket(hiveRecord.getCategory().getBucketName())
-                            .withKey(meta.getThumbKey())
-                            .withOutputStream(fos)
-                            .withEncryption(thumbFileName);
-                    hiveOssService.using(hiveRecord.getProvider()).download(task);
-                }
-                tmpFile.renameTo(cacheFile);
-            } catch (Exception e) {
-                FileUtils.deleteQuietly(tmpFile);
-                throw e;
-            }
-        }
-        try (InputStream in = new FileInputStream(cacheFile)) {
-            IOUtils.copy(in, outputStream);
-        }
     }
 
     public void streamPreviewThumbnail(CategoryFileContext file, OutputStream outputStream) throws Exception {
@@ -283,15 +171,13 @@ public class HiveDownloadService {
         }
     }
 
-    private HiveOssTask createOutputTask(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
-        HiveOssTask task = HiveOssTask.createTask()
-                .withBucket(hiveRecord.getCategory().getBucketName())
-                .withKey(hiveRecord.getFileKey())
-                .withOutputStream(outputStream);
-        if (!HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
-            task = task.withEncryption(hiveRecord.getFileName());
+    public void releaseLocalStatus(CategoryFileContext context) {
+        hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), null);
+        File downloadFile = getDownloadFile(context.zipped(), context.fileName());
+        boolean deleted = FileUtils.deleteQuietly(downloadFile);
+        if (!deleted) {
+            log.error("failed to delete file {}", downloadFile);
         }
-        return task;
     }
 
     private HiveOssTask createOutputTask(CategoryFileContext file, OutputStream outputStream) throws Exception {
@@ -313,26 +199,11 @@ public class HiveDownloadService {
         return file.category().categoryId() + ":" + file.key();
     }
 
-    public File getDownloadFile(HiveRecord hiveRecord) {
-        String fileName;
-        if (StringUtils.isNotEmpty(hiveRecord.getFileName())) {
-            fileName = hiveRecord.getFileName();
-        } else {
-            fileName = hiveRecord.getFileKey();
-        }
-        return new File(downloadFolder, hiveRecord.getZipped() ? fileName + ".zip" : fileName);
+    public File getDownloadFile(Boolean zipped, String fileName) {
+        return new File(downloadFolder, Boolean.TRUE.equals(zipped) ? fileName + ".zip" : fileName);
     }
 
-    public File getDownloadFile(CategoryFileContext file) {
-        String fileName = StringUtils.defaultIfBlank(file.fileName(), file.key());
-        return new File(downloadFolder, Boolean.TRUE.equals(file.zipped()) ? fileName + ".zip" : fileName);
-    }
-
-    private File getDownloadPartFile(HiveRecord hiveRecord) {
-        return new File(getDownloadFile(hiveRecord).getAbsolutePath() + ".part");
-    }
-
-    private File getDownloadPartFile(CategoryFileContext file) {
-        return new File(getDownloadFile(file).getAbsolutePath() + ".part");
+    private File getDownloadPartFile(Boolean zipped, String fileName) {
+        return new File(getDownloadFile(zipped, fileName).getAbsolutePath() + ".part");
     }
 }

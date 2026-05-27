@@ -1,74 +1,54 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
-import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveDownloadStatusVO;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
-import cc.cc3c.hive.oss.web.CategoryContext;
+import cc.cc3c.hive.oss.web.CategoryFileContext;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
-import java.util.Optional;
 
 @Slf4j
 @RestController
 public class HiveFileDownloadController {
 
-    private final HiveRecordRepository hiveRecordRepository;
     private final HiveDownloadService hiveDownloadService;
 
-    public HiveFileDownloadController(HiveRecordRepository hiveRecordRepository,
-                                      HiveDownloadService hiveDownloadService) {
-        this.hiveRecordRepository = hiveRecordRepository;
+    public HiveFileDownloadController(HiveDownloadService hiveDownloadService) {
         this.hiveDownloadService = hiveDownloadService;
     }
 
     @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
-    public ResponseEntity<Void> downloadTask(CategoryContext category,
-                                             @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
-                category.categoryId(), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        HiveRecord hiveRecord = optional.get();
+    public ResponseEntity<Void> downloadTask(CategoryFileContext context) {
         try {
-            hiveDownloadService.download(hiveRecord);
+            hiveDownloadService.reconcileStaleDownloading(context);
+            hiveDownloadService.download(context);
         } catch (Exception e) {
-            log.error("failed to download {}", fileKey);
+            log.error("failed to download {}", context.key());
             return ResponseEntity.internalServerError().build();
         }
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/categories/{category}/files/download-task-status/{*fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(CategoryContext category,
-                                                                     @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
-                category.categoryId(), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        HiveRecord hiveRecord = optional.get();
-        hiveDownloadService.reconcileStaleDownloading(hiveRecord);
-        if (hiveRecord.getDownloadStatus() == null) {
+    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(CategoryFileContext context) {
+        HiveDownloadStatus status = hiveDownloadService.reconcileStaleDownloading(context);
+        if (status == null) {
             return ResponseEntity.badRequest().build();
         }
         HiveDownloadStatusVO.HiveDownloadStatusVOBuilder builder = HiveDownloadStatusVO.builder()
-                .status(hiveRecord.getDownloadStatus());
-        HiveOssTask downLoadTask = hiveDownloadService.getDownLoadTask(hiveRecord);
+                .status(status);
+        HiveOssTask downLoadTask = hiveDownloadService.getDownLoadTask(context);
         if (downLoadTask != null) {
             builder.progress(downLoadTask.getProgress());
         }
-        if (hiveRecord.getDownloadStatus() == HiveDownloadStatus.success) {
-            File downloadFile = hiveDownloadService.getDownloadFile(hiveRecord);
+        if (status == HiveDownloadStatus.success) {
+            File downloadFile = hiveDownloadService.getDownloadFile(context.zipped(), context.fileName());
             if (downloadFile.exists()) {
                 builder.downloadUrl(downloadFile.toURI().toString().replaceFirst("^file:/", "file:///"));
             }
@@ -77,21 +57,8 @@ public class HiveFileDownloadController {
     }
 
     @PostMapping("/categories/{category}/files/release-local/{*fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(CategoryContext category,
-                                                               @PathVariable("fileKey") String fileKey) {
-        fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
-                category.categoryId(), fileKey);
-        if (optional.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        HiveRecord hiveRecord = optional.get();
-        hiveRecordRepository.updateDownloadStatus(category.categoryId(), fileKey, null);
-        File downloadFile = hiveDownloadService.getDownloadFile(hiveRecord);
-        boolean deleted = FileUtils.deleteQuietly(downloadFile);
-        if (!deleted) {
-            log.error("failed to delete file {}", downloadFile);
-        }
+    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(CategoryFileContext context) {
+        hiveDownloadService.releaseLocalStatus(context);
         return ResponseEntity.ok().build();
     }
 }
