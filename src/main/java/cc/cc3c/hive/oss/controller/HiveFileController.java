@@ -1,8 +1,8 @@
 package cc.cc3c.hive.oss.controller;
 
+import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
-import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.FileGroupRecordRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
@@ -12,10 +12,10 @@ import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordsVO;
 import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveOssService;
-import cc.cc3c.hive.oss.service.HiveSyncService;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.web.CategoryContext;
+import cc.cc3c.hive.oss.web.FileKeyNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Page;
@@ -40,17 +40,15 @@ public class HiveFileController {
     private final FileGroupService fileGroupService;
     private final HiveRecordVOAssembler assembler;
     private final FileGroupRecordRepository fileGroupRecordRepository;
-    private final HiveSyncService hiveSyncService;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
 
-    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveSyncService hiveSyncService, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService) {
+    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
         this.fileGroupService = fileGroupService;
         this.assembler = assembler;
         this.fileGroupRecordRepository = fileGroupRecordRepository;
-        this.hiveSyncService = hiveSyncService;
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
     }
@@ -61,10 +59,7 @@ public class HiveFileController {
         if (fileKeys == null || fileKeys.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
-        List<String> normalizedKeys = fileKeys.stream()
-                .filter(StringUtils::isNotBlank)
-                .distinct()
-                .toList();
+        List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
         if (normalizedKeys.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -75,11 +70,11 @@ public class HiveFileController {
 
     @GetMapping("/categories/{category}/files")
     public HiveRecordsVO getFiles(CategoryContext category,
-                                   @RequestParam(value = "groupId", required = false) Long groupId,
-                                   @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
-                                   @RequestParam(value = "keyword", required = false) String keyword,
-                                   @RequestParam("page") Integer page,
-                                   @RequestParam("pageSize") Integer pageSize) {
+                                  @RequestParam(value = "groupId", required = false) Long groupId,
+                                  @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
+                                  @RequestParam(value = "keyword", required = false) String keyword,
+                                  @RequestParam("page") Integer page,
+                                  @RequestParam("pageSize") Integer pageSize) {
         Long categoryId = category.categoryId();
         String normalizedKeyword = StringUtils.trimToNull(keyword);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
@@ -138,12 +133,16 @@ public class HiveFileController {
 
     @PostMapping("/categories/{category}/files:mark-delete")
     public ResponseEntity<Void> bulkMarkDelete(CategoryContext category,
-                                                @RequestBody FileBulkMarkDeleteRequest request) {
+                                               @RequestBody FileBulkMarkDeleteRequest request) {
         if (request.getFileKeys() == null || request.getFileKeys().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
+        List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(request.getFileKeys());
+        if (normalizedKeys.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
         List<HiveRecord> records = hiveRecordRepository
-                .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), request.getFileKeys());
+                .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
         for (HiveRecord record : records) {
             record.setStatus(HiveRecordStatus.TO_BE_DELETED);
             record.setDeletable(false);
