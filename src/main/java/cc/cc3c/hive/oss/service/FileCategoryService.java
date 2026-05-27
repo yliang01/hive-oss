@@ -117,6 +117,7 @@ public class FileCategoryService {
         if (!hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
             throw new IllegalStateException("category still has files");
         }
+        hiveRecordRepository.detachFromCategory(entity.getId());
         fileCategoryRepository.delete(entity);
     }
 
