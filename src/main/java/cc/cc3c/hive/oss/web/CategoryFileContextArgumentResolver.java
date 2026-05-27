@@ -1,6 +1,6 @@
 package cc.cc3c.hive.oss.web;
 
-import cc.cc3c.hive.domain.model.HiveRecordFileView;
+import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.core.MethodParameter;
@@ -44,10 +44,10 @@ public class CategoryFileContextArgumentResolver implements HandlerMethodArgumen
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "path variable is required: " + FILE_KEY_VARIABLE);
         }
-        HiveRecordFileView record = hiveRecordRepository
-                .findViewByCategory_IdAndFileKeyAndDeletedIsFalse(category.categoryId(), key)
+        HiveRecord record = hiveRecordRepository
+                .findByCategory_IdAndFileKeyAndDeletedIsFalse(category.categoryId(), key)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return CategoryFileContext.from(category, key, record);
+        return CategoryFileContext.from(category, record);
     }
 
     @SuppressWarnings("unchecked")

@@ -22,46 +22,10 @@ public class FileCategoryResolver {
                 .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
     }
 
-    public FileCategoryEntity resolveFallbackCategory(HiveRecord record) {
-        if (record.getCategory() != null) {
-            return record.getCategory();
-        }
-        return fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(CategoryStorageClass.STANDARD)
-                .orElse(null);
-    }
-
-    public CategoryStorageClass resolveRecordStorageClass(HiveRecord record) {
-        if (record == null) {
-            return CategoryStorageClass.STANDARD;
-        }
-        if (record.getCategory() != null) {
-            return normalizeStorageClass(record.getCategory().getStorageClass());
-        }
-        return CategoryStorageClass.STANDARD;
-    }
-
-    public FileCategoryEntity resolveDefaultCategoryByStorageClass(CategoryStorageClass storageClass) {
-        CategoryStorageClass normalized = storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
-        FileCategoryEntity category = fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(normalized)
-                .orElse(null);
-        if (category != null) {
-            return category;
-        }
-        if (normalized == CategoryStorageClass.ARCHIVE) {
-            return fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(CategoryStorageClass.STANDARD)
-                    .orElseThrow(() -> new IllegalArgumentException("no enabled category for storage class"));
-        }
-        throw new IllegalArgumentException("no enabled category for storage class");
-    }
-
     private String normalizeCode(String code) {
         if (StringUtils.isBlank(code)) {
             return code;
         }
         return code.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private CategoryStorageClass normalizeStorageClass(CategoryStorageClass storageClass) {
-        return storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
     }
 }

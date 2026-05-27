@@ -1,6 +1,5 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
@@ -34,22 +33,22 @@ public class HiveRecordVOAssembler {
     static final String PREVIEW_BLOCKED_OSS_ONLY = "OSS_ONLY";
     static final String PREVIEW_BLOCKED_ARCHIVE = "ARCHIVE";
     static final Map<String, String> MIME_BY_EXTENSION = Map.of(
-            "jpg",  MediaType.IMAGE_JPEG_VALUE,
+            "jpg", MediaType.IMAGE_JPEG_VALUE,
             "jpeg", MediaType.IMAGE_JPEG_VALUE,
-            "png",  MediaType.IMAGE_PNG_VALUE,
-            "gif",  MediaType.IMAGE_GIF_VALUE,
+            "png", MediaType.IMAGE_PNG_VALUE,
+            "gif", MediaType.IMAGE_GIF_VALUE,
             "webp", "image/webp"
     );
     static final Map<String, String> FILE_MIME_BY_EXTENSION = Map.ofEntries(
-            Map.entry("pdf",  "application/pdf"),
-            Map.entry("txt",  MediaType.TEXT_PLAIN_VALUE),
-            Map.entry("log",  MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("pdf", "application/pdf"),
+            Map.entry("txt", MediaType.TEXT_PLAIN_VALUE),
+            Map.entry("log", MediaType.TEXT_PLAIN_VALUE),
             Map.entry("json", "application/json"),
-            Map.entry("xml",  "text/xml"),
-            Map.entry("csv",  "text/csv"),
+            Map.entry("xml", "text/xml"),
+            Map.entry("csv", "text/csv"),
             Map.entry("yaml", "text/yaml"),
-            Map.entry("yml",  "text/yaml"),
-            Map.entry("md",   "text/markdown")
+            Map.entry("yml", "text/yaml"),
+            Map.entry("md", "text/markdown")
     );
 
     private final FileCategoryResolver fileCategoryResolver;
@@ -67,12 +66,12 @@ public class HiveRecordVOAssembler {
     }
 
     public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
-        CategoryStorageClass storageClass = fileCategoryResolver.resolveRecordStorageClass(record);
-        boolean restorable = isRestorable(record);
+        CategoryFileContext fileContext = CategoryFileContext.from(context, record);
+        boolean restorable = isRestorable(fileContext);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
                 ? hiveDownloadService.getDownLoadTask(record) : null;
-        PreviewDecision previewDecision = evaluatePreview(record, context.uiVariant());
+        PreviewDecision previewDecision = evaluatePreview(fileContext);
         File downloadFile = hiveDownloadService.getDownloadFile(record.getZipped(), record.getFileName());
         String localPath = record.getDownloadStatus() != null && record.getDownloadStatus() == HiveDownloadStatus.success
                 ? downloadFile.toURI().toString().replaceFirst("^file:/", "file:///") : null;
@@ -95,11 +94,11 @@ public class HiveRecordVOAssembler {
                 .fileKey(record.getFileKey())
                 .zipped(record.getZipped())
                 .size(record.getSize())
-                .storageClass(storageClass.name())
+                .storageClass(context.storageClass().name())
                 .status(record.getStatus().name())
                 .updateTime(record.getUpdateTime())
                 .unfreezeTime(record.getRestoreTime())
-                .unfreezeStatus(resolveUnfreezeStatus(record).name())
+                .unfreezeStatus(record.getRestoreStatus() == null ? null : record.getRestoreStatus().name())
                 .restorable(restorable)
                 .downloadable(downloadable)
                 .downloadStatus(record.getDownloadStatus() == null ? null : record.getDownloadStatus().name())
@@ -120,54 +119,9 @@ public class HiveRecordVOAssembler {
                 .build();
     }
 
-    public boolean isRestorable(HiveRecord record) {
-        return isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))
-                && (record.getRestoreTime() == null || record.getRestoreTime().isBefore(LocalDateTime.now()));
-    }
-
     public boolean isRestorable(CategoryFileContext file) {
-        return isArchiveStorageClass(file.category().storageClass())
+        return CategoryStorageClass.ARCHIVE == file.category().storageClass()
                 && (file.restoreTime() == null || file.restoreTime().isBefore(LocalDateTime.now()));
-    }
-
-    private HiveRestoreStatusState resolveUnfreezeStatus(HiveRecord record) {
-        if (!isArchiveStorageClass(fileCategoryResolver.resolveRecordStorageClass(record))) {
-            return HiveRestoreStatusState.NOT_STARTED;
-        }
-        if (record.getRestoreTime() != null && record.getRestoreTime().isAfter(LocalDateTime.now())) {
-            return HiveRestoreStatusState.COMPLETED;
-        }
-        if (record.getRestoreStatus() == HiveRestoreStatusState.IN_PROGRESS) {
-            return HiveRestoreStatusState.IN_PROGRESS;
-        }
-        if (record.getRestoreStatus() == HiveRestoreStatusState.FAILED) {
-            return HiveRestoreStatusState.FAILED;
-        }
-        return HiveRestoreStatusState.NOT_STARTED;
-    }
-
-    private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
-        return storageClass == CategoryStorageClass.ARCHIVE;
-    }
-
-    public PreviewDecision evaluatePreview(HiveRecord record, String uiVariant) {
-        if ("archive".equals(uiVariant)) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_ARCHIVE);
-        }
-        if (HiveRecordStatus.OSS_ONLY.equals(record.getStatus())) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
-        }
-        if (isRestorable(record)) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_FROZEN);
-        }
-        if (record.getSize() != null && previewMaxSizeBytes > 0 && record.getSize() > previewMaxSizeBytes) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_TOO_LARGE);
-        }
-        String mimeType = detectPreviewMimeType(record.getFileName(), uiVariant);
-        if (mimeType == null) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_UNSUPPORTED_TYPE);
-        }
-        return PreviewDecision.allowed(mimeType);
     }
 
     public PreviewDecision evaluatePreview(CategoryFileContext file) {
