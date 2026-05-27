@@ -1,0 +1,10 @@
+package cc.cc3c.hive.oss.service;
+
+public record FileQueryParams(
+        Long groupId,
+        boolean ungroupedOnly,
+        String keyword,
+        int page,
+        int pageSize
+) {
+}

@@ -48,16 +48,6 @@ public class FileGroupService {
         return groups.stream().map(this::toGroupVO).toList();
     }
 
-    public Set<Integer> resolveRecordIdsForQuery(String categoryCode, Long groupId) {
-        List<Integer> ids;
-        if (groupId != null) {
-            ids = fileGroupRecordRepository.findHiveRecordIdsByGroupIdAndCategoryCode(groupId, categoryCode);
-        } else {
-            ids = fileGroupRecordRepository.findHiveRecordIdsByCategoryCode(categoryCode);
-        }
-        return new HashSet<>(ids);
-    }
-
     public Map<Integer, FileGroupRecord> findGroupRecordMapByRecordIds(Collection<Integer> recordIds) {
         if (recordIds == null || recordIds.isEmpty()) {
             return Map.of();

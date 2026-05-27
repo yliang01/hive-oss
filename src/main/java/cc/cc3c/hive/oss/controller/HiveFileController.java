@@ -11,6 +11,8 @@ import cc.cc3c.hive.oss.controller.vo.FileBulkMarkDeleteRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordsVO;
 import cc.cc3c.hive.oss.service.FileGroupService;
+import cc.cc3c.hive.oss.service.FileQueryParams;
+import cc.cc3c.hive.oss.service.HiveRecordQueryService;
 import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
@@ -19,16 +21,12 @@ import cc.cc3c.hive.oss.web.FileKeyNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -37,15 +35,17 @@ public class HiveFileController {
 
     private final HiveRecordRepository hiveRecordRepository;
     private final HiveRecordImageMetaRepository imageMetaRepository;
+    private final HiveRecordQueryService hiveRecordQueryService;
     private final FileGroupService fileGroupService;
     private final HiveRecordVOAssembler assembler;
     private final FileGroupRecordRepository fileGroupRecordRepository;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
 
-    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService) {
+    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
+        this.hiveRecordQueryService = hiveRecordQueryService;
         this.fileGroupService = fileGroupService;
         this.assembler = assembler;
         this.fileGroupRecordRepository = fileGroupRecordRepository;
@@ -76,40 +76,8 @@ public class HiveFileController {
                                   @RequestParam("page") Integer page,
                                   @RequestParam("pageSize") Integer pageSize) {
         Long categoryId = category.categoryId();
-        String normalizedKeyword = StringUtils.trimToNull(keyword);
-        Pageable pageable = PageRequest.of(page, pageSize, Sort.by("id").descending());
-        Page<HiveRecord> pageResult;
-
-        if (groupId != null) {
-            Set<Integer> ids = fileGroupService.resolveRecordIdsForQuery(category.code(), groupId);
-            if (ids.isEmpty()) {
-                return HiveRecordsVO.builder().files(List.of()).total(0).page(page).pageSize(pageSize).build();
-            }
-            if (normalizedKeyword != null) {
-                pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndIdInAndFileNameContainingIgnoreCase(pageable, categoryId, ids, normalizedKeyword);
-            } else {
-                pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndIdIn(pageable, categoryId, ids);
-            }
-        } else if (Boolean.TRUE.equals(ungroupedOnly)) {
-            Set<Integer> groupedIds = fileGroupService.resolveRecordIdsForQuery(category.code(), null);
-            if (groupedIds.isEmpty()) {
-                if (normalizedKeyword != null) {
-                    pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndFileNameContainingIgnoreCase(pageable, categoryId, normalizedKeyword);
-                } else {
-                    pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(pageable, categoryId);
-                }
-            } else {
-                if (normalizedKeyword != null) {
-                    pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndIdNotInAndFileNameContainingIgnoreCase(pageable, categoryId, groupedIds, normalizedKeyword);
-                } else {
-                    pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndIdNotIn(pageable, categoryId, groupedIds);
-                }
-            }
-        } else if (normalizedKeyword != null) {
-            pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndFileNameContainingIgnoreCase(pageable, categoryId, normalizedKeyword);
-        } else {
-            pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(pageable, categoryId);
-        }
+        Page<HiveRecord> pageResult = hiveRecordQueryService.query(categoryId,
+                new FileQueryParams(groupId, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize));
 
         List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
