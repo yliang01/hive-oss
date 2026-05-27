@@ -3,6 +3,8 @@ package cc.cc3c.hive.oss.controller.vo;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 @Builder
 public class FileCategoryVO {
@@ -14,4 +16,12 @@ public class FileCategoryVO {
     private String uiVariant;
     private Boolean enabled;
     private Integer sortOrder;
+    private LocalDateTime lastSyncTime;
+    private String lastSyncStatus;
+    private Integer lastSyncOssTotal;
+    private Integer lastSyncOssOnly;
+    private Integer lastSyncOssToDbMatched;
+    private Integer lastSyncOssToDbMismatched;
+    private Integer lastSyncDbToOssMismatched;
+    private String lastSyncMessage;
 }

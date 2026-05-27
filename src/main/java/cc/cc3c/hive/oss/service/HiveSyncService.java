@@ -26,84 +26,98 @@ public class HiveSyncService {
     private final HiveOssService hiveOssService;
 
     private final HiveRecordRepository hiveRecordRepository;
+    private final HiveSyncSummaryService hiveSyncSummaryService;
 
-    public HiveSyncService(HiveOssService hiveOssService, HiveRecordRepository hiveRecordRepository) {
+    public HiveSyncService(HiveOssService hiveOssService,
+                           HiveRecordRepository hiveRecordRepository,
+                           HiveSyncSummaryService hiveSyncSummaryService) {
         this.hiveOssService = hiveOssService;
         this.hiveRecordRepository = hiveRecordRepository;
+        this.hiveSyncSummaryService = hiveSyncSummaryService;
     }
 
     public HiveSyncVO syncRemote(FileCategoryEntity category) throws Exception {
-        String bucketName = category.getBucketName();
-        HiveOssTask task = HiveOssTask.createTask().withBucket(bucketName);
-        Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
-                .listObjects(task)
-                .stream()
-                .filter(object -> !isBackupManagedObject(object.getFileKey()) && !isThumbnailObject(object.getFileKey()))
-                .collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
+        try {
+            String bucketName = category.getBucketName();
+            HiveOssTask task = HiveOssTask.createTask().withBucket(bucketName);
+            Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
+                    .listObjects(task)
+                    .stream()
+                    .filter(object -> !isBackupManagedObject(object.getFileKey()) && !isThumbnailObject(object.getFileKey()))
+                    .collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
 
-        List<HiveRecord> recordList = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(bucketName);
-        Map<String, HiveRecord> recordMap = recordList.stream().collect(Collectors.toMap(HiveRecord::getFileKey, v -> v));
+            List<HiveRecord> recordList = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(bucketName);
+            Map<String, HiveRecord> recordMap = recordList.stream().collect(Collectors.toMap(HiveRecord::getFileKey, v -> v));
 
-        int ossOnly = 0;
-        int ossToDbMatched = 0;
-        int ossToDbMismatched = 0;
-        for (Map.Entry<String, HiveOssObject> entry : objectMap.entrySet()) {
-            String fileKey = entry.getKey();
-            HiveOssObject hiveOssObject = entry.getValue();
-            HiveRecord hiveRecord = recordMap.get(fileKey);
-            if (hiveRecord != null) {
-                if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
+            int ossOnly = 0;
+            int ossToDbMatched = 0;
+            int ossToDbMismatched = 0;
+            for (Map.Entry<String, HiveOssObject> entry : objectMap.entrySet()) {
+                String fileKey = entry.getKey();
+                HiveOssObject hiveOssObject = entry.getValue();
+                HiveRecord hiveRecord = recordMap.get(fileKey);
+                if (hiveRecord != null) {
+                    if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
+                        hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
+                        hiveRecord.setBucketName(bucketName);
+                        hiveRecord.setSize(hiveOssObject.getSize());
+                        hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                        hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
+                        ossToDbMatched++;
+                    } else if (HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
+                        ossOnly++;
+                    } else {
+                        ossToDbMismatched++;
+                    }
+                } else {
+                    hiveRecord = new HiveRecord();
+                    hiveRecord.setFileName("");
+                    hiveRecord.setFileKey(fileKey);
+                    hiveRecord.setZipped(false);
                     hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
                     hiveRecord.setBucketName(bucketName);
                     hiveRecord.setSize(hiveOssObject.getSize());
                     hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
-                    hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
-                    ossToDbMatched++;
-                } else if (HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
+                    hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);
+                    recordList.add(hiveRecord);
                     ossOnly++;
-                } else {
-                    ossToDbMismatched++;
                 }
-            } else {
-                hiveRecord = new HiveRecord();
-                hiveRecord.setFileName("");
-                hiveRecord.setFileKey(fileKey);
-                hiveRecord.setZipped(false);
-                hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-                hiveRecord.setBucketName(bucketName);
-                hiveRecord.setSize(hiveOssObject.getSize());
-                hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
-                hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);
-                recordList.add(hiveRecord);
-                ossOnly++;
+                hiveRecord.setLastSyncTime(LocalDateTime.now());
+                if (isArchiveStorageClass(category.getStorageClass())) {
+                    Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
+                    hiveRecord.setDeletable(duration.toDays() > 61);
+                } else {
+                    hiveRecord.setDeletable(true);
+                }
             }
-            hiveRecord.setLastSyncTime(LocalDateTime.now());
-            if (isArchiveStorageClass(category.getStorageClass())) {
-                Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
-                hiveRecord.setDeletable(duration.toDays() > 61);
-            } else {
-                hiveRecord.setDeletable(true);
-            }
-        }
 
-        int dbToOssMismatched = 0;
-        for (Map.Entry<String, HiveRecord> entry : recordMap.entrySet()) {
-            String fileKey = entry.getKey();
-            HiveOssObject hiveOssObject = objectMap.get(fileKey);
-            if (hiveOssObject == null) {
-                HiveRecord hiveRecord = entry.getValue();
-                hiveRecord.setStatus(HiveRecordStatus.DB_ONLY);
-                hiveRecord.setDeletable(true);
-                dbToOssMismatched++;
+            int dbToOssMismatched = 0;
+            for (Map.Entry<String, HiveRecord> entry : recordMap.entrySet()) {
+                String fileKey = entry.getKey();
+                HiveOssObject hiveOssObject = objectMap.get(fileKey);
+                if (hiveOssObject == null) {
+                    HiveRecord hiveRecord = entry.getValue();
+                    hiveRecord.setStatus(HiveRecordStatus.DB_ONLY);
+                    hiveRecord.setDeletable(true);
+                    dbToOssMismatched++;
+                }
             }
+            hiveRecordRepository.saveAll(recordList);
+            HiveSyncVO result = HiveSyncVO.builder()
+                    .status("SUCCESS")
+                    .syncedAt(LocalDateTime.now())
+                    .ossTotal(objectMap.size())
+                    .ossOnly(ossOnly)
+                    .ossToDbMatched(ossToDbMatched)
+                    .ossToDbMismatched(ossToDbMismatched)
+                    .dbToOssMismatched(dbToOssMismatched)
+                    .build();
+            hiveSyncSummaryService.markSuccess(category, result);
+            return result;
+        } catch (Exception e) {
+            hiveSyncSummaryService.markFailed(category, e);
+            throw e;
         }
-        hiveRecordRepository.saveAll(recordList);
-        return HiveSyncVO.builder()
-                .ossTotal(objectMap.size())
-                .ossOnly(ossOnly)
-                .ossToDbMatched(ossToDbMatched)
-                .ossToDbMismatched(ossToDbMismatched)
-                .dbToOssMismatched(dbToOssMismatched).build();
     }
 
     private static final String THUMB_PREFIX = "thumb/";

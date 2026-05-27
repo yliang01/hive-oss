@@ -227,6 +227,14 @@ public class FileGroupService {
                 .uiVariant(category.getUiVariant())
                 .enabled(category.getEnabled())
                 .sortOrder(category.getSortOrder())
+                .lastSyncTime(category.getLastSyncTime())
+                .lastSyncStatus(category.getLastSyncStatus())
+                .lastSyncOssTotal(category.getLastSyncOssTotal())
+                .lastSyncOssOnly(category.getLastSyncOssOnly())
+                .lastSyncOssToDbMatched(category.getLastSyncOssToDbMatched())
+                .lastSyncOssToDbMismatched(category.getLastSyncOssToDbMismatched())
+                .lastSyncDbToOssMismatched(category.getLastSyncDbToOssMismatched())
+                .lastSyncMessage(category.getLastSyncMessage())
                 .build();
     }
 
