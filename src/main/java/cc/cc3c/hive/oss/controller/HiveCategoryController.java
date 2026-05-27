@@ -3,7 +3,6 @@ package cc.cc3c.hive.oss.controller;
 import cc.cc3c.hive.oss.controller.vo.CategoryUpsertRequest;
 import cc.cc3c.hive.oss.controller.vo.FileCategoryVO;
 import cc.cc3c.hive.oss.service.FileCategoryService;
-import cc.cc3c.hive.oss.service.FileGroupService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,11 +13,9 @@ import java.util.List;
 public class HiveCategoryController {
 
     private final FileCategoryService fileCategoryService;
-    private final FileGroupService fileGroupService;
 
-    public HiveCategoryController(FileCategoryService fileCategoryService, FileGroupService fileGroupService) {
+    public HiveCategoryController(FileCategoryService fileCategoryService) {
         this.fileCategoryService = fileCategoryService;
-        this.fileGroupService = fileGroupService;
     }
 
     @GetMapping
@@ -36,15 +33,9 @@ public class HiveCategoryController {
         return fileCategoryService.updateCategory(request);
     }
 
-    @PostMapping("/{categoryCode}/disable")
-    public ResponseEntity<Void> disableCategory(@PathVariable("categoryCode") String categoryCode) {
-        fileGroupService.disableCategory(categoryCode);
-        return ResponseEntity.ok().build();
-    }
-
     @DeleteMapping("/{categoryCode}")
     public ResponseEntity<Void> deleteCategory(@PathVariable("categoryCode") String categoryCode) {
-        fileGroupService.deleteCategory(categoryCode);
+        fileCategoryService.deleteCategory(categoryCode);
         return ResponseEntity.ok().build();
     }
 }

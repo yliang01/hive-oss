@@ -3,6 +3,8 @@ package cc.cc3c.hive.oss.service;
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
+import cc.cc3c.hive.domain.repository.FileGroupRepository;
+import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.CategoryUpsertRequest;
 import cc.cc3c.hive.oss.controller.vo.FileCategoryVO;
 import jakarta.transaction.Transactional;
@@ -16,9 +18,15 @@ import java.util.Locale;
 @Component
 public class FileCategoryService {
     private final FileCategoryRepository fileCategoryRepository;
+    private final FileGroupRepository fileGroupRepository;
+    private final HiveRecordRepository hiveRecordRepository;
 
-    public FileCategoryService(FileCategoryRepository fileCategoryRepository) {
+    public FileCategoryService(FileCategoryRepository fileCategoryRepository,
+                               FileGroupRepository fileGroupRepository,
+                               HiveRecordRepository hiveRecordRepository) {
         this.fileCategoryRepository = fileCategoryRepository;
+        this.fileGroupRepository = fileGroupRepository;
+        this.hiveRecordRepository = hiveRecordRepository;
     }
 
     @Transactional
@@ -44,19 +52,19 @@ public class FileCategoryService {
         if (request.getSortOrder() == null) {
             throw new IllegalArgumentException("sortOrder is required");
         }
-        if (fileCategoryRepository.existsByCodeIgnoreCase(request.getCode())) {
+        if (fileCategoryRepository.existsByCode(request.getCode().toUpperCase(Locale.ROOT))) {
             throw new IllegalArgumentException("category code exists");
         }
-        String bucketName = request.getBucketName().trim();
-        if (fileCategoryRepository.existsByBucketNameIgnoreCase(bucketName)) {
+        String bucketName = request.getBucketName();
+        if (fileCategoryRepository.existsByBucketName(bucketName)) {
             throw new IllegalArgumentException("bucket name exists");
         }
         FileCategoryEntity entity = new FileCategoryEntity();
-        entity.setCode(request.getCode().trim().toUpperCase(Locale.ROOT));
-        entity.setName(request.getName().trim());
+        entity.setCode(request.getCode().toUpperCase(Locale.ROOT));
+        entity.setName(request.getName());
         entity.setBucketName(bucketName);
-        entity.setStorageClass(CategoryStorageClass.valueOf(request.getStorageClass().trim().toUpperCase(Locale.ROOT)));
-        entity.setUiVariant(request.getUiVariant().trim());
+        entity.setStorageClass(CategoryStorageClass.valueOf(request.getStorageClass().toUpperCase(Locale.ROOT)));
+        entity.setUiVariant(request.getUiVariant());
         entity.setEnabled(request.getEnabled());
         entity.setSortOrder(request.getSortOrder());
         entity.setCreatedAt(LocalDateTime.now());
@@ -69,7 +77,8 @@ public class FileCategoryService {
         if (StringUtils.isBlank(request.getCode())) {
             throw new IllegalArgumentException("code is required");
         }
-        FileCategoryEntity entity = resolveCategory(request.getCode());
+        FileCategoryEntity entity = fileCategoryRepository.findByCode(request.getCode())
+                .orElseThrow(() -> new IllegalArgumentException("category not found: " + request.getCode()));
         if (StringUtils.isBlank(request.getName())) {
             throw new IllegalArgumentException("name is required");
         }
@@ -82,8 +91,8 @@ public class FileCategoryService {
         if (request.getSortOrder() == null) {
             throw new IllegalArgumentException("sortOrder is required");
         }
-        entity.setName(request.getName().trim());
-        entity.setUiVariant(request.getUiVariant().trim());
+        entity.setName(request.getName());
+        entity.setUiVariant(request.getUiVariant());
         entity.setEnabled(request.getEnabled());
         entity.setSortOrder(request.getSortOrder());
         entity.setUpdatedAt(LocalDateTime.now());
@@ -97,6 +106,20 @@ public class FileCategoryService {
         return entities.stream().map(this::toCategoryVO).toList();
     }
 
+    @Transactional
+    public void deleteCategory(String categoryCode) {
+        FileCategoryEntity entity = fileCategoryRepository.findByCode(categoryCode)
+                .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
+        long groupCount = fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).size();
+        if (groupCount > 0) {
+            throw new IllegalStateException("category still has groups");
+        }
+        if (!hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
+            throw new IllegalStateException("category still has files");
+        }
+        fileCategoryRepository.delete(entity);
+    }
+
     public FileCategoryEntity resolveCategory(String categoryCode) {
         return fileCategoryRepository.findByCodeAndEnabledTrue(normalizeCode(categoryCode))
                 .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
@@ -106,7 +129,7 @@ public class FileCategoryService {
         if (StringUtils.isBlank(code)) {
             return code;
         }
-        return code.trim().toUpperCase(Locale.ROOT);
+        return code.toUpperCase(Locale.ROOT);
     }
 
     private FileCategoryVO toCategoryVO(FileCategoryEntity category) {

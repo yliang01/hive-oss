@@ -66,10 +66,6 @@ public class FileGroupService {
                 .collect(HashMap::new, (map, item) -> map.put(item.getHiveRecord().getId(), item), HashMap::putAll);
     }
 
-    public FileCategoryEntity resolveCategory(String categoryCode) {
-        return fileCategoryService.resolveCategory(categoryCode);
-    }
-
     @Transactional
     public void assignFiles(String categoryCode, Long groupId, List<String> fileKeys, String operator) {
         if (fileKeys == null || fileKeys.isEmpty()) {
@@ -93,27 +89,6 @@ public class FileGroupService {
             link.setAssignedAt(LocalDateTime.now());
             fileGroupRecordRepository.save(link);
         }
-    }
-
-    @Transactional
-    public void disableCategory(String categoryCode) {
-        FileCategoryEntity entity = fileCategoryService.resolveCategory(categoryCode);
-        entity.setEnabled(false);
-        entity.setUpdatedAt(LocalDateTime.now());
-        fileCategoryRepository.save(entity);
-    }
-
-    @Transactional
-    public void deleteCategory(String categoryCode) {
-        FileCategoryEntity entity = fileCategoryService.resolveCategory(categoryCode);
-        long groupCount = fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).size();
-        if (groupCount > 0) {
-            throw new IllegalStateException("category still has groups");
-        }
-        if (!hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
-            throw new IllegalStateException("category still has files");
-        }
-        fileCategoryRepository.delete(entity);
     }
 
     @Transactional
