@@ -89,10 +89,6 @@ public class FileGroupService {
         return fileCategoryResolver.resolveCategory(categoryCode);
     }
 
-    public String resolveBucket(String categoryCode) {
-        return fileCategoryResolver.resolveBucket(categoryCode);
-    }
-
     @Transactional
     public void assignFiles(String categoryCode, Long groupId, List<String> fileKeys, String operator) {
         if (fileKeys == null || fileKeys.isEmpty()) {
@@ -100,9 +96,9 @@ public class FileGroupService {
         }
         FileGroup group = fileGroupRepository.findByIdAndCategory_CodeAndEnabledTrue(groupId, categoryCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
-        String bucketName = resolveBucket(categoryCode);
+        FileCategoryEntity category = fileCategoryResolver.resolveCategory(categoryCode);
         List<String> normalizedKeys = fileKeys.stream().filter(StringUtils::isNotBlank).distinct().toList();
-        List<HiveRecord> records = hiveRecordRepository.findByBucketNameAndFileKeyInAndDeletedIsFalse(bucketName, normalizedKeys);
+        List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.getId(), normalizedKeys);
         String assignedBy = StringUtils.defaultIfBlank(operator, "system");
         for (HiveRecord record : records) {
             Optional<FileGroupRecord> existing = fileGroupRecordRepository.findByHiveRecord_IdAndGroup_Category_Code(record.getId(), categoryCode);
@@ -155,7 +151,7 @@ public class FileGroupService {
         if (groupCount > 0) {
             throw new IllegalStateException("category still has groups");
         }
-        if (!hiveRecordRepository.findByBucketNameAndDeletedIsFalse(entity.getBucketName()).isEmpty()) {
+        if (!hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
             throw new IllegalStateException("category still has files");
         }
         fileCategoryRepository.delete(entity);
@@ -254,6 +250,11 @@ public class FileGroupService {
         entity.setName(StringUtils.defaultIfBlank(request.getName(), entity.getName()));
         String bucketName = StringUtils.trimToNull(request.getBucketName());
         if (bucketName != null) {
+            if (entity.getId() != null
+                    && !StringUtils.equals(bucketName, entity.getBucketName())
+                    && !hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
+                throw new IllegalStateException("cannot change bucketName while category has files");
+            }
             if (entity.getId() == null) {
                 if (fileCategoryRepository.existsByBucketNameIgnoreCase(bucketName)) {
                     throw new IllegalArgumentException("bucket name exists");

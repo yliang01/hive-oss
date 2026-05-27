@@ -39,6 +39,7 @@ public class HiveSyncService {
     public HiveSyncVO syncRemote(FileCategoryEntity category) throws Exception {
         try {
             String bucketName = category.getBucketName();
+            Long categoryId = category.getId();
             HiveOssTask task = HiveOssTask.createTask().withBucket(bucketName);
             Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
                     .listObjects(task)
@@ -46,7 +47,7 @@ public class HiveSyncService {
                     .filter(object -> !isBackupManagedObject(object.getFileKey()) && !isThumbnailObject(object.getFileKey()))
                     .collect(Collectors.toMap(HiveOssObject::getFileKey, v -> v));
 
-            List<HiveRecord> recordList = hiveRecordRepository.findByBucketNameAndDeletedIsFalse(bucketName);
+            List<HiveRecord> recordList = hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(categoryId);
             Map<String, HiveRecord> recordMap = recordList.stream().collect(Collectors.toMap(HiveRecord::getFileKey, v -> v));
 
             int ossOnly = 0;
@@ -59,7 +60,7 @@ public class HiveSyncService {
                 if (hiveRecord != null) {
                     if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
                         hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-                        hiveRecord.setBucketName(bucketName);
+                        hiveRecord.setCategory(category);
                         hiveRecord.setSize(hiveOssObject.getSize());
                         hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                         hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
@@ -75,7 +76,7 @@ public class HiveSyncService {
                     hiveRecord.setFileKey(fileKey);
                     hiveRecord.setZipped(false);
                     hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-                    hiveRecord.setBucketName(bucketName);
+                    hiveRecord.setCategory(category);
                     hiveRecord.setSize(hiveOssObject.getSize());
                     hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
                     hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);

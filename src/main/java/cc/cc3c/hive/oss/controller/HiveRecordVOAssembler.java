@@ -69,7 +69,7 @@ public class HiveRecordVOAssembler {
         boolean restorable = isRestorable(record);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
-                ? hiveDownloadService.getDownLoadTask(record.getFileKey()) : null;
+                ? hiveDownloadService.getDownLoadTask(record) : null;
         FileCategoryEntity finalCategory = category != null
                 ? fileCategoryResolver.resolveCategory(category)
                 : fileCategoryResolver.resolveFallbackCategory(record);
@@ -145,7 +145,7 @@ public class HiveRecordVOAssembler {
         return HiveRestoreStatusState.NOT_STARTED;
     }
 
-    public boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
+    private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
         return storageClass == CategoryStorageClass.ARCHIVE;
     }
 

@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.service;
 
+import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
@@ -53,18 +54,19 @@ public class HiveUploadService {
      * under a stable name, uploaded to OSS, then handed to ThumbnailAsyncService without a copy.
      * All other files are streamed directly without local buffering.
      */
-    public String uploadStreaming(String bucketName, CategoryStorageClass storageClass,
-                                  String uiVariant, String fileName, InputStream inputStream) throws Exception {
+    public String uploadStreaming(FileCategoryEntity category, CategoryStorageClass storageClass,
+                                   String uiVariant, String fileName, InputStream inputStream) throws Exception {
+        String bucketName = category.getBucketName();
         String fileKey = DigestUtils.md5Hex(fileName);
         CategoryStorageClass resolved = resolveStorageClass(storageClass);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByBucketNameAndFileKey(bucketName, fileKey);
+        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(category.getId(), fileKey);
         if (isActiveUploaded(existing)) {
             IOUtils.closeQuietly(inputStream);
             return fileKey;
         }
         // startUploadRecord is outside the try block: UploadAlreadyInProgressException propagates
         // without triggering markFailed because no save has occurred at that point.
-        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), bucketName, fileName, fileKey);
+        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), category, fileName, fileKey);
         try {
             boolean thumbnail = thumbnailAsyncService.isThumbnailEligible(uiVariant, fileName);
             if (thumbnail) {
@@ -79,9 +81,9 @@ public class HiveUploadService {
         }
     }
 
-    public HiveUploadCheckVO checkUpload(String bucketName, String fileName) {
+    public HiveUploadCheckVO checkUpload(Long categoryId, String fileName) {
         String fileKey = DigestUtils.md5Hex(fileName);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByBucketNameAndFileKey(bucketName, fileKey);
+        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(categoryId, fileKey);
         if (existing.isEmpty() || Boolean.TRUE.equals(existing.get().getDeleted())) {
             return HiveUploadCheckVO.builder()
                     .exists(false)
@@ -107,7 +109,7 @@ public class HiveUploadService {
             }
             try (InputStream fileIn = new FileInputStream(cacheFile)) {
                 HiveOssTask task = HiveOssTask.createTask()
-                        .withBucket(hiveRecord.getBucketName())
+                        .withBucket(hiveRecord.getCategory().getBucketName())
                         .withKey(fileKey)
                         .withInputStream(fileIn)
                         .withStorageClass(storageClass.name())
@@ -127,7 +129,7 @@ public class HiveUploadService {
     private void doStreamUpload(HiveRecord hiveRecord, String fileKey, String fileName,
                                  CategoryStorageClass storageClass, InputStream inputStream) throws Exception {
         HiveOssTask task = HiveOssTask.createTask()
-                .withBucket(hiveRecord.getBucketName())
+                .withBucket(hiveRecord.getCategory().getBucketName())
                 .withKey(fileKey)
                 .withInputStream(inputStream)
                 .withStorageClass(storageClass.name())
@@ -147,7 +149,7 @@ public class HiveUploadService {
         hiveRecordRepository.save(hiveRecord);
     }
 
-    private HiveRecord startUploadRecord(HiveRecord hiveRecord, String bucketName, String fileName, String fileKey) {
+    private HiveRecord startUploadRecord(HiveRecord hiveRecord, FileCategoryEntity category, String fileName, String fileKey) {
         if (hiveRecord.getId() != null
                 && !Boolean.TRUE.equals(hiveRecord.getDeleted())
                 && HiveRecordStatus.UPLOADING.equals(hiveRecord.getStatus())) {
@@ -157,7 +159,7 @@ public class HiveUploadService {
         hiveRecord.setFileKey(fileKey);
         hiveRecord.setZipped(false);
         hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-        hiveRecord.setBucketName(bucketName);
+        hiveRecord.setCategory(category);
         hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
         hiveRecord.setDeleted(false);
         hiveRecord.setDeletable(false);

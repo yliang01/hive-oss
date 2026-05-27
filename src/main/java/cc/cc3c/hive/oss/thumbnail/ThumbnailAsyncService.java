@@ -102,7 +102,7 @@ public class ThumbnailAsyncService {
             String thumbKey = ThumbnailKeyHelper.thumbKey(fileKey);
             String thumbFileName = ThumbnailKeyHelper.thumbFileNameForEncryption(fileKey);
             HiveOssTask thumbTask = HiveOssTask.createTask()
-                    .withBucket(hiveRecord.getBucketName())
+                    .withBucket(hiveRecord.getCategory().getBucketName())
                     .withKey(thumbKey)
                     .withInputStream(new ByteArrayInputStream(thumb.thumbJpeg()))
                     .withStorageClass(CategoryStorageClass.STANDARD.name())

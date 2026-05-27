@@ -17,29 +17,15 @@ public class FileCategoryResolver {
         this.fileCategoryRepository = fileCategoryRepository;
     }
 
-    public String resolveBucket(String categoryCode) {
-        String normalizedCode = normalizeCode(categoryCode);
-        FileCategoryEntity category = fileCategoryRepository.findByCodeAndEnabledTrue(normalizedCode)
-                .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
-        if (StringUtils.isBlank(category.getBucketName())) {
-            throw new IllegalArgumentException("bucket name not configured for category: " + categoryCode);
-        }
-        return category.getBucketName();
-    }
-
     public FileCategoryEntity resolveCategory(String categoryCode) {
         return fileCategoryRepository.findByCodeAndEnabledTrue(normalizeCode(categoryCode))
                 .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
     }
 
     public FileCategoryEntity resolveFallbackCategory(HiveRecord record) {
-        if (StringUtils.isNotBlank(record.getBucketName())) {
-            FileCategoryEntity category = fileCategoryRepository.findByBucketNameAndEnabledTrue(record.getBucketName()).orElse(null);
-            if (category != null) {
-                return category;
-            }
+        if (record.getCategory() != null) {
+            return record.getCategory();
         }
-
         return fileCategoryRepository.findFirstByStorageClassAndEnabledTrueOrderBySortOrderAscIdAsc(CategoryStorageClass.STANDARD)
                 .orElse(null);
     }
@@ -49,21 +35,14 @@ public class FileCategoryResolver {
         return normalizeStorageClass(category.getStorageClass());
     }
 
-    public CategoryStorageClass resolveStorageClassByBucket(String bucketName) {
-        if (StringUtils.isBlank(bucketName)) {
-            return CategoryStorageClass.STANDARD;
-        }
-        return fileCategoryRepository.findByBucketNameAndEnabledTrue(bucketName)
-                .map(FileCategoryEntity::getStorageClass)
-                .map(this::normalizeStorageClass)
-                .orElse(CategoryStorageClass.STANDARD);
-    }
-
     public CategoryStorageClass resolveRecordStorageClass(HiveRecord record) {
         if (record == null) {
             return CategoryStorageClass.STANDARD;
         }
-        return resolveStorageClassByBucket(record.getBucketName());
+        if (record.getCategory() != null) {
+            return normalizeStorageClass(record.getCategory().getStorageClass());
+        }
+        return CategoryStorageClass.STANDARD;
     }
 
     public FileCategoryEntity resolveDefaultCategoryByStorageClass(CategoryStorageClass storageClass) {
