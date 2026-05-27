@@ -5,8 +5,6 @@ import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadVO;
-import cc.cc3c.hive.oss.service.FileCategoryResolver;
-import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveUploadService;
 import cc.cc3c.hive.oss.service.UploadAlreadyInProgressException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,7 +15,6 @@ import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,26 +27,30 @@ import java.util.Map;
 @RestController
 public class HiveFileUploadController {
 
-    private final FileGroupService fileGroupService;
-    private final FileCategoryResolver fileCategoryResolver;
     private final HiveUploadService hiveUploadService;
 
-    public HiveFileUploadController(FileGroupService fileGroupService,
-                                    FileCategoryResolver fileCategoryResolver,
-                                    HiveUploadService hiveUploadService) {
-        this.fileGroupService = fileGroupService;
-        this.fileCategoryResolver = fileCategoryResolver;
+    public HiveFileUploadController(HiveUploadService hiveUploadService) {
         this.hiveUploadService = hiveUploadService;
     }
 
+    @PostMapping("/categories/{category}/files/upload/check")
+    public ResponseEntity<?> checkUpload(CategoryContext category,
+                                         @RequestBody HiveUploadCheckRequest request) {
+        if (request == null || StringUtils.isBlank(request.getFileName())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "fileName is required"));
+        }
+        HiveUploadCheckVO result = hiveUploadService.checkUpload(category.categoryId(), request.getFileName());
+        if (HiveRecordStatus.UPLOADING.equals(result.getStatus())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(result);
+        }
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/categories/{category}/files/upload")
-    public ResponseEntity<?> upload(@PathVariable("category") String category, HttpServletRequest request) throws IOException {
-        String bucketName = fileGroupService.resolveBucket(category);
-        CategoryStorageClass storageClass = fileCategoryResolver.resolveStorageClass(category);
+    public ResponseEntity<?> upload(CategoryContext category, HttpServletRequest request) throws IOException {
         try {
             JakartaServletFileUpload<?, ?> upload = new JakartaServletFileUpload<>();
             FileItemInputIterator iter = upload.getItemIterator(request);
-            var cat = fileCategoryResolver.resolveCategory(category);
 
             String fileKey = null;
             while (iter.hasNext()) {
@@ -58,7 +59,7 @@ public class HiveFileUploadController {
                     item.getInputStream().transferTo(OutputStream.nullOutputStream());
                     continue;
                 }
-                fileKey = hiveUploadService.uploadStreaming(bucketName, storageClass, cat.getUiVariant(), item.getName(), item.getInputStream());
+                fileKey = hiveUploadService.uploadStreaming(category.category(), category.storageClass(), category.uiVariant(), item.getName(), item.getInputStream());
             }
 
             if (fileKey == null) {
@@ -73,17 +74,4 @@ public class HiveFileUploadController {
         }
     }
 
-    @PostMapping("/categories/{category}/files/upload/check")
-    public ResponseEntity<?> checkUpload(@PathVariable("category") String category,
-                                         @RequestBody HiveUploadCheckRequest request) {
-        if (request == null || StringUtils.isBlank(request.getFileName())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "fileName is required"));
-        }
-        String bucketName = fileGroupService.resolveBucket(category);
-        HiveUploadCheckVO result = hiveUploadService.checkUpload(bucketName, request.getFileName());
-        if (HiveRecordStatus.UPLOADING.equals(result.getStatus())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(result);
-        }
-        return ResponseEntity.ok(result);
-    }
 }
