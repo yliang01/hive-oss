@@ -9,6 +9,7 @@ import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailGeneratorService;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailKeyHelper;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import cc.cc3c.hive.oss.web.CategoryFileContext;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -75,6 +76,14 @@ public class HiveDownloadService {
         return downloadTasks.get(taskMapKey(hiveRecord));
     }
 
+    public HiveOssTask getDownLoadTask(CategoryFileContext file) {
+        return downloadTasks.get(taskMapKey(file));
+    }
+
+    public void releaseLocalStatus(Long categoryId, String fileKey) {
+        hiveRecordRepository.updateDownloadStatus(categoryId, fileKey, null);
+    }
+
     public void reconcileStaleDownloading(HiveRecord hiveRecord) {
         if (HiveDownloadStatus.downloading == hiveRecord.getDownloadStatus()
                 && !downloadTasks.containsKey(taskMapKey(hiveRecord))) {
@@ -82,6 +91,16 @@ public class HiveDownloadService {
             hiveRecordRepository.updateDownloadStatus(hiveRecord.getCategory().getId(), hiveRecord.getFileKey(), HiveDownloadStatus.failed);
             hiveRecord.setDownloadStatus(HiveDownloadStatus.failed);
         }
+    }
+
+    public HiveDownloadStatus reconcileStaleDownloading(CategoryFileContext file) {
+        if (HiveDownloadStatus.downloading == file.downloadStatus()
+                && !downloadTasks.containsKey(taskMapKey(file))) {
+            FileUtils.deleteQuietly(getDownloadPartFile(file));
+            hiveRecordRepository.updateDownloadStatus(file.category().categoryId(), file.key(), HiveDownloadStatus.failed);
+            return HiveDownloadStatus.failed;
+        }
+        return file.downloadStatus();
     }
 
     public void download(HiveRecord hiveRecord) throws Exception {
@@ -102,6 +121,37 @@ public class HiveDownloadService {
         Thread.ofVirtual().start(() -> {
             try {
                 hiveOssService.using(hiveRecord.getProvider()).download(finalTask);
+                Files.move(partFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.success);
+                log.info("download finished {}", finalTask);
+            } catch (Exception e) {
+                log.error("download failed {}", finalTask, e);
+                FileUtils.deleteQuietly(partFile);
+                hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.failed);
+            } finally {
+                downloadTasks.remove(taskMapKey);
+            }
+        });
+    }
+
+    public void download(CategoryFileContext file) throws Exception {
+        reconcileStaleDownloading(file);
+        if (HiveDownloadStatus.downloading == file.downloadStatus()) {
+            return;
+        }
+        File targetFile = getDownloadFile(file);
+        File partFile = getDownloadPartFile(file);
+        FileUtils.deleteQuietly(partFile);
+        HiveOssTask task = createOutputTask(file, new FileOutputStream(partFile));
+        log.info("download start {}", task);
+        String taskMapKey = taskMapKey(file);
+        Long categoryId = file.category().categoryId();
+        hiveRecordRepository.updateDownloadStatus(categoryId, task.getKey(), HiveDownloadStatus.downloading);
+        downloadTasks.put(taskMapKey, task);
+        HiveOssTask finalTask = task;
+        Thread.ofVirtual().start(() -> {
+            try {
+                hiveOssService.using(file.provider()).download(finalTask);
                 Files.move(partFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.success);
                 log.info("download finished {}", finalTask);
@@ -143,6 +193,33 @@ public class HiveDownloadService {
         hiveOssService.using(hiveRecord.getProvider()).download(task);
     }
 
+    public void streamPreview(CategoryFileContext file, OutputStream outputStream, String uiVariant) throws Exception {
+        boolean useCache = "image".equalsIgnoreCase(uiVariant)
+                && thumbnailGeneratorService.isSupportedImage(file.fileName());
+        if (useCache) {
+            File cacheFile = new File(imageCacheDir, file.key() + "_src");
+            if (!cacheFile.isFile()) {
+                File tmpFile = new File(imageCacheDir, file.key() + "_src.tmp");
+                try {
+                    try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
+                        HiveOssTask task = createOutputTask(file, fos);
+                        hiveOssService.using(file.provider()).download(task);
+                    }
+                    tmpFile.renameTo(cacheFile);
+                } catch (Exception e) {
+                    FileUtils.deleteQuietly(tmpFile);
+                    throw e;
+                }
+            }
+            try (InputStream in = new FileInputStream(cacheFile)) {
+                IOUtils.copy(in, outputStream);
+            }
+            return;
+        }
+        HiveOssTask task = createOutputTask(file, outputStream);
+        hiveOssService.using(file.provider()).download(task);
+    }
+
     /**
      * Stream thumbnail image (decrypted). Cache-first: serves from local _thumb if present,
      * otherwise downloads from OSS and caches before serving.
@@ -177,6 +254,35 @@ public class HiveDownloadService {
         }
     }
 
+    public void streamPreviewThumbnail(CategoryFileContext file, OutputStream outputStream) throws Exception {
+        File cacheFile = new File(imageCacheDir, file.key() + "_thumb");
+        if (!cacheFile.isFile()) {
+            HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(file.recordId()).orElse(null);
+            if (meta == null || !"READY".equals(meta.getThumbStatus()) || StringUtils.isBlank(meta.getThumbKey())) {
+                throw new IllegalArgumentException("no thumbnail key for record");
+            }
+            String thumbFileName = ThumbnailKeyHelper.thumbFileNameForEncryption(file.key());
+            File tmpFile = new File(imageCacheDir, file.key() + "_thumb.tmp");
+            try {
+                try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
+                    HiveOssTask task = HiveOssTask.createTask()
+                            .withBucket(file.category().bucketName())
+                            .withKey(meta.getThumbKey())
+                            .withOutputStream(fos)
+                            .withEncryption(thumbFileName);
+                    hiveOssService.using(file.provider()).download(task);
+                }
+                tmpFile.renameTo(cacheFile);
+            } catch (Exception e) {
+                FileUtils.deleteQuietly(tmpFile);
+                throw e;
+            }
+        }
+        try (InputStream in = new FileInputStream(cacheFile)) {
+            IOUtils.copy(in, outputStream);
+        }
+    }
+
     private HiveOssTask createOutputTask(HiveRecord hiveRecord, OutputStream outputStream) throws Exception {
         HiveOssTask task = HiveOssTask.createTask()
                 .withBucket(hiveRecord.getCategory().getBucketName())
@@ -188,8 +294,23 @@ public class HiveDownloadService {
         return task;
     }
 
+    private HiveOssTask createOutputTask(CategoryFileContext file, OutputStream outputStream) throws Exception {
+        HiveOssTask task = HiveOssTask.createTask()
+                .withBucket(file.category().bucketName())
+                .withKey(file.key())
+                .withOutputStream(outputStream);
+        if (!HiveRecordStatus.OSS_ONLY.equals(file.status())) {
+            task = task.withEncryption(file.fileName());
+        }
+        return task;
+    }
+
     private String taskMapKey(HiveRecord hiveRecord) {
         return hiveRecord.getCategory().getId() + ":" + hiveRecord.getFileKey();
+    }
+
+    private String taskMapKey(CategoryFileContext file) {
+        return file.category().categoryId() + ":" + file.key();
     }
 
     public File getDownloadFile(HiveRecord hiveRecord) {
@@ -202,7 +323,16 @@ public class HiveDownloadService {
         return new File(downloadFolder, hiveRecord.getZipped() ? fileName + ".zip" : fileName);
     }
 
+    public File getDownloadFile(CategoryFileContext file) {
+        String fileName = StringUtils.defaultIfBlank(file.fileName(), file.key());
+        return new File(downloadFolder, Boolean.TRUE.equals(file.zipped()) ? fileName + ".zip" : fileName);
+    }
+
     private File getDownloadPartFile(HiveRecord hiveRecord) {
         return new File(getDownloadFile(hiveRecord).getAbsolutePath() + ".part");
+    }
+
+    private File getDownloadPartFile(CategoryFileContext file) {
+        return new File(getDownloadFile(file).getAbsolutePath() + ".part");
     }
 }

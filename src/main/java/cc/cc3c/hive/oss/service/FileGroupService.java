@@ -13,6 +13,7 @@ import cc.cc3c.hive.oss.controller.vo.CategoryUpsertRequest;
 import cc.cc3c.hive.oss.controller.vo.FileCategoryVO;
 import cc.cc3c.hive.oss.controller.vo.FileGroupVO;
 import cc.cc3c.hive.oss.controller.vo.GroupUpsertRequest;
+import cc.cc3c.hive.oss.web.FileKeyNormalizer;
 import jakarta.transaction.Transactional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -97,7 +98,10 @@ public class FileGroupService {
         FileGroup group = fileGroupRepository.findByIdAndCategory_CodeAndEnabledTrue(groupId, categoryCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
         FileCategoryEntity category = fileCategoryResolver.resolveCategory(categoryCode);
-        List<String> normalizedKeys = fileKeys.stream().filter(StringUtils::isNotBlank).distinct().toList();
+        List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
+        if (normalizedKeys.isEmpty()) {
+            return;
+        }
         List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.getId(), normalizedKeys);
         String assignedBy = StringUtils.defaultIfBlank(operator, "system");
         for (HiveRecord record : records) {

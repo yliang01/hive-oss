@@ -30,11 +30,6 @@ public class FileCategoryResolver {
                 .orElse(null);
     }
 
-    public CategoryStorageClass resolveStorageClass(String categoryCode) {
-        FileCategoryEntity category = resolveCategory(categoryCode);
-        return normalizeStorageClass(category.getStorageClass());
-    }
-
     public CategoryStorageClass resolveRecordStorageClass(HiveRecord record) {
         if (record == null) {
             return CategoryStorageClass.STANDARD;
