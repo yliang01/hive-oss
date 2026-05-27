@@ -4,7 +4,6 @@ import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -24,28 +23,25 @@ public class HiveFilePreviewController {
 
     private final HiveRecordRepository hiveRecordRepository;
     private final HiveRecordImageMetaRepository imageMetaRepository;
-    private final FileGroupService fileGroupService;
     private final HiveDownloadService hiveDownloadService;
     private final HiveRecordVOAssembler assembler;
 
     public HiveFilePreviewController(HiveRecordRepository hiveRecordRepository,
-                                     HiveRecordImageMetaRepository imageMetaRepository,
-                                     FileGroupService fileGroupService,
-                                     HiveDownloadService hiveDownloadService,
-                                     HiveRecordVOAssembler assembler) {
+                                      HiveRecordImageMetaRepository imageMetaRepository,
+                                      HiveDownloadService hiveDownloadService,
+                                      HiveRecordVOAssembler assembler) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
-        this.fileGroupService = fileGroupService;
         this.hiveDownloadService = hiveDownloadService;
         this.assembler = assembler;
     }
 
     @GetMapping("/categories/{category}/files/preview/thumbnail/{*fileKey}")
-    public ResponseEntity<StreamingResponseBody> previewThumbnail(@PathVariable("category") String category,
-                                                                   @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<StreamingResponseBody> previewThumbnail(CategoryContext category,
+                                                                    @PathVariable("fileKey") String fileKey) {
         String key = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), key);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
+                category.categoryId(), key);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -69,17 +65,16 @@ public class HiveFilePreviewController {
     }
 
     @GetMapping("/categories/{category}/files/preview/{*fileKey}")
-    public ResponseEntity<StreamingResponseBody> previewFile(@PathVariable("category") String category,
-                                                              @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<StreamingResponseBody> previewFile(CategoryContext category,
+                                                               @PathVariable("fileKey") String fileKey) {
         String key = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), key);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
+                category.categoryId(), key);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
-        String uiVariant = Optional.ofNullable(fileGroupService.resolveCategory(category))
-                .map(cat -> cat.getUiVariant()).orElse(null);
+        String uiVariant = category.uiVariant();
         PreviewDecision previewDecision = assembler.evaluatePreview(hiveRecord, uiVariant);
         if (!previewDecision.previewable()) {
             if (HiveRecordVOAssembler.PREVIEW_BLOCKED_FROZEN.equals(previewDecision.blockedReason())) {
