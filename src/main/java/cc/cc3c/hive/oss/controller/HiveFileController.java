@@ -94,7 +94,7 @@ public class HiveFileController {
             } else {
                 pageResult = hiveRecordRepository.findByCategory_IdAndDeletedIsFalseAndIdIn(pageable, categoryId, ids);
             }
-        } else if (ungroupedOnly) {
+        } else if (Boolean.TRUE.equals(ungroupedOnly)) {
             Set<Integer> groupedIds = fileGroupService.resolveRecordIdsForQuery(category.code(), null);
             if (groupedIds.isEmpty()) {
                 if (normalizedKeyword != null) {
