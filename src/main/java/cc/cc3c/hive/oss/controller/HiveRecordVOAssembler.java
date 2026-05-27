@@ -6,9 +6,8 @@ import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
-import cc.cc3c.hive.domain.model.HiveRestoreStatusState;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
-import cc.cc3c.hive.oss.service.FileCategoryResolver;
+import cc.cc3c.hive.oss.service.FileCategoryService;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.web.CategoryContext;
@@ -51,12 +50,12 @@ public class HiveRecordVOAssembler {
             Map.entry("md", "text/markdown")
     );
 
-    private final FileCategoryResolver fileCategoryResolver;
+    private final FileCategoryService fileCategoryService;
     private final HiveDownloadService hiveDownloadService;
     private long previewMaxSizeBytes;
 
-    public HiveRecordVOAssembler(FileCategoryResolver fileCategoryResolver, HiveDownloadService hiveDownloadService) {
-        this.fileCategoryResolver = fileCategoryResolver;
+    public HiveRecordVOAssembler(FileCategoryService fileCategoryService, HiveDownloadService hiveDownloadService) {
+        this.fileCategoryService = fileCategoryService;
         this.hiveDownloadService = hiveDownloadService;
     }
 

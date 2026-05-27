@@ -1,7 +1,7 @@
 package cc.cc3c.hive.oss.web;
 
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
-import cc.cc3c.hive.oss.service.FileCategoryResolver;
+import cc.cc3c.hive.oss.service.FileCategoryService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -9,16 +9,16 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class CategoryContextFactory {
-    private final FileCategoryResolver fileCategoryResolver;
+    private final FileCategoryService fileCategoryService;
 
-    public CategoryContextFactory(FileCategoryResolver fileCategoryResolver) {
-        this.fileCategoryResolver = fileCategoryResolver;
+    public CategoryContextFactory(FileCategoryService fileCategoryService) {
+        this.fileCategoryService = fileCategoryService;
     }
 
     public CategoryContext resolve(String requestedCode) {
         FileCategoryEntity category;
         try {
-            category = fileCategoryResolver.resolveCategory(requestedCode);
+            category = fileCategoryService.resolveCategory(requestedCode);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }

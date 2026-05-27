@@ -1,8 +1,8 @@
 package cc.cc3c.hive.oss.controller;
 
+import cc.cc3c.hive.oss.controller.vo.CategoryUpsertRequest;
 import cc.cc3c.hive.oss.controller.vo.FileCategoryVO;
-import cc.cc3c.hive.oss.controller.vo.FileGroupAssignRequest;
-import cc.cc3c.hive.oss.controller.vo.FileGroupVO;
+import cc.cc3c.hive.oss.service.FileCategoryService;
 import cc.cc3c.hive.oss.service.FileGroupService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -10,29 +10,41 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@RequestMapping("/categories")
 public class HiveCategoryController {
 
+    private final FileCategoryService fileCategoryService;
     private final FileGroupService fileGroupService;
 
-    public HiveCategoryController(FileGroupService fileGroupService) {
+    public HiveCategoryController(FileCategoryService fileCategoryService, FileGroupService fileGroupService) {
+        this.fileCategoryService = fileCategoryService;
         this.fileGroupService = fileGroupService;
     }
 
-    @GetMapping("/categories")
-    public List<FileCategoryVO> getCategories() {
-        return fileGroupService.listCategories();
+    @GetMapping
+    public List<FileCategoryVO> getCategories(@RequestParam(value = "includeDisabled", defaultValue = "false") boolean includeDisabled) {
+        return fileCategoryService.listCategories(includeDisabled);
     }
 
-    @GetMapping("/categories/{category}/groups")
-    public List<FileGroupVO> getGroups(@PathVariable("category") String category) {
-        return fileGroupService.listGroups(category);
+    @PostMapping
+    public FileCategoryVO createCategory(@RequestBody CategoryUpsertRequest request) {
+        return fileCategoryService.createCategory(request);
     }
 
-    @PostMapping("/categories/{category}/groups/{groupId}/files:assign")
-    public ResponseEntity<Void> assignFilesToGroup(@PathVariable("category") String category,
-                                                   @PathVariable("groupId") Long groupId,
-                                                   @RequestBody FileGroupAssignRequest request) {
-        fileGroupService.assignFiles(category, groupId, request.getFileKeys(), request.getOperator());
+    @PutMapping
+    public FileCategoryVO updateCategory(@RequestBody CategoryUpsertRequest request) {
+        return fileCategoryService.updateCategory(request);
+    }
+
+    @PostMapping("/{categoryCode}/disable")
+    public ResponseEntity<Void> disableCategory(@PathVariable("categoryCode") String categoryCode) {
+        fileGroupService.disableCategory(categoryCode);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{categoryCode}")
+    public ResponseEntity<Void> deleteCategory(@PathVariable("categoryCode") String categoryCode) {
+        fileGroupService.deleteCategory(categoryCode);
         return ResponseEntity.ok().build();
     }
 }

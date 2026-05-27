@@ -27,45 +27,25 @@ public class FileGroupService {
     private final FileGroupRepository fileGroupRepository;
     private final FileGroupRecordRepository fileGroupRecordRepository;
     private final HiveRecordRepository hiveRecordRepository;
-    private final FileCategoryResolver fileCategoryResolver;
+    private final FileCategoryService fileCategoryService;
 
     public FileGroupService(FileCategoryRepository fileCategoryRepository,
                             FileGroupRepository fileGroupRepository,
                             FileGroupRecordRepository fileGroupRecordRepository,
                             HiveRecordRepository hiveRecordRepository,
-                            FileCategoryResolver fileCategoryResolver) {
+                            FileCategoryService fileCategoryService) {
         this.fileCategoryRepository = fileCategoryRepository;
         this.fileGroupRepository = fileGroupRepository;
         this.fileGroupRecordRepository = fileGroupRecordRepository;
         this.hiveRecordRepository = hiveRecordRepository;
-        this.fileCategoryResolver = fileCategoryResolver;
+        this.fileCategoryService = fileCategoryService;
     }
 
-    public List<FileCategoryVO> listCategories() {
-        return fileCategoryRepository.findByEnabledTrueOrderBySortOrderAscIdAsc().stream()
-                .map(this::toCategoryVO)
-                .toList();
-    }
-
-    public List<FileCategoryVO> listCategoriesForAdmin() {
-        return fileCategoryRepository.findAll().stream()
-                .sorted(Comparator.comparing(FileCategoryEntity::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                        .thenComparing(FileCategoryEntity::getId))
-                .map(this::toCategoryVO)
-                .toList();
-    }
-
-    public List<FileGroupVO> listGroups(String categoryCode) {
-        return fileGroupRepository.findByCategory_CodeAndEnabledTrueOrderBySortOrderAscIdAsc(categoryCode)
-                .stream()
-                .map(this::toGroupVO)
-                .toList();
-    }
-
-    public List<FileGroupVO> listGroupsForAdmin(String categoryCode) {
-        return fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).stream()
-                .map(this::toGroupVO)
-                .toList();
+    public List<FileGroupVO> listGroups(String categoryCode, boolean includeDisabled) {
+        List<FileGroup> groups = includeDisabled
+                ? fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode)
+                : fileGroupRepository.findByCategory_CodeAndEnabledTrueOrderBySortOrderAscIdAsc(categoryCode);
+        return groups.stream().map(this::toGroupVO).toList();
     }
 
     public Set<Integer> resolveRecordIdsForQuery(String categoryCode, Long groupId) {
@@ -87,7 +67,7 @@ public class FileGroupService {
     }
 
     public FileCategoryEntity resolveCategory(String categoryCode) {
-        return fileCategoryResolver.resolveCategory(categoryCode);
+        return fileCategoryService.resolveCategory(categoryCode);
     }
 
     @Transactional
@@ -97,7 +77,7 @@ public class FileGroupService {
         }
         FileGroup group = fileGroupRepository.findByIdAndCategory_CodeAndEnabledTrue(groupId, categoryCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
-        FileCategoryEntity category = fileCategoryResolver.resolveCategory(categoryCode);
+        FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
         List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
         if (normalizedKeys.isEmpty()) {
             return;
@@ -116,33 +96,8 @@ public class FileGroupService {
     }
 
     @Transactional
-    public FileCategoryVO createCategory(CategoryUpsertRequest request) {
-        if (StringUtils.isBlank(request.getCode()) || StringUtils.isBlank(request.getName())) {
-            throw new IllegalArgumentException("code and name are required");
-        }
-        if (fileCategoryRepository.existsByCodeIgnoreCase(request.getCode())) {
-            throw new IllegalArgumentException("category code exists");
-        }
-        FileCategoryEntity entity = new FileCategoryEntity();
-        entity.setCode(request.getCode().trim().toUpperCase(Locale.ROOT));
-        fillCategory(entity, request);
-        entity.setEnabled(request.getEnabled() == null || request.getEnabled());
-        entity.setCreatedAt(LocalDateTime.now());
-        entity.setUpdatedAt(LocalDateTime.now());
-        return toCategoryVO(fileCategoryRepository.save(entity));
-    }
-
-    @Transactional
-    public FileCategoryVO updateCategory(String categoryCode, CategoryUpsertRequest request) {
-        FileCategoryEntity entity = fileCategoryResolver.resolveCategory(categoryCode);
-        fillCategory(entity, request);
-        entity.setUpdatedAt(LocalDateTime.now());
-        return toCategoryVO(fileCategoryRepository.save(entity));
-    }
-
-    @Transactional
     public void disableCategory(String categoryCode) {
-        FileCategoryEntity entity = fileCategoryResolver.resolveCategory(categoryCode);
+        FileCategoryEntity entity = fileCategoryService.resolveCategory(categoryCode);
         entity.setEnabled(false);
         entity.setUpdatedAt(LocalDateTime.now());
         fileCategoryRepository.save(entity);
@@ -150,7 +105,7 @@ public class FileGroupService {
 
     @Transactional
     public void deleteCategory(String categoryCode) {
-        FileCategoryEntity entity = fileCategoryResolver.resolveCategory(categoryCode);
+        FileCategoryEntity entity = fileCategoryService.resolveCategory(categoryCode);
         long groupCount = fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).size();
         if (groupCount > 0) {
             throw new IllegalStateException("category still has groups");
@@ -169,7 +124,7 @@ public class FileGroupService {
         if (fileGroupRepository.existsByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, request.getGroupCode())) {
             throw new IllegalArgumentException("group code exists in category");
         }
-        FileCategoryEntity category = fileCategoryResolver.resolveCategory(categoryCode);
+        FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
         FileGroup group = new FileGroup();
         group.setCategory(category);
         group.setGroupCode(request.getGroupCode().trim());
@@ -217,27 +172,6 @@ public class FileGroupService {
         fileGroupRepository.delete(group);
     }
 
-    private FileCategoryVO toCategoryVO(FileCategoryEntity category) {
-        return FileCategoryVO.builder()
-                .id(category.getId())
-                .code(category.getCode())
-                .name(category.getName())
-                .bucketName(category.getBucketName())
-                .storageClass(category.getStorageClass() == null ? null : category.getStorageClass().name())
-                .uiVariant(category.getUiVariant())
-                .enabled(category.getEnabled())
-                .sortOrder(category.getSortOrder())
-                .lastSyncTime(category.getLastSyncTime())
-                .lastSyncStatus(category.getLastSyncStatus())
-                .lastSyncOssTotal(category.getLastSyncOssTotal())
-                .lastSyncOssOnly(category.getLastSyncOssOnly())
-                .lastSyncOssToDbMatched(category.getLastSyncOssToDbMatched())
-                .lastSyncOssToDbMismatched(category.getLastSyncOssToDbMismatched())
-                .lastSyncDbToOssMismatched(category.getLastSyncDbToOssMismatched())
-                .lastSyncMessage(category.getLastSyncMessage())
-                .build();
-    }
-
     private FileGroupVO toGroupVO(FileGroup group) {
         return FileGroupVO.builder()
                 .groupId(group.getId())
@@ -248,43 +182,5 @@ public class FileGroupService {
                 .sortOrder(group.getSortOrder())
                 .enabled(group.getEnabled())
                 .build();
-    }
-
-    private void fillCategory(FileCategoryEntity entity, CategoryUpsertRequest request) {
-        entity.setName(StringUtils.defaultIfBlank(request.getName(), entity.getName()));
-        String bucketName = StringUtils.trimToNull(request.getBucketName());
-        if (bucketName != null) {
-            if (entity.getId() != null
-                    && !StringUtils.equals(bucketName, entity.getBucketName())
-                    && !hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(entity.getId()).isEmpty()) {
-                throw new IllegalStateException("cannot change bucketName while category has files");
-            }
-            if (entity.getId() == null) {
-                if (fileCategoryRepository.existsByBucketNameIgnoreCase(bucketName)) {
-                    throw new IllegalArgumentException("bucket name exists");
-                }
-            } else if (fileCategoryRepository.existsByBucketNameIgnoreCaseAndIdNot(bucketName, entity.getId())) {
-                throw new IllegalArgumentException("bucket name exists");
-            }
-            entity.setBucketName(bucketName);
-        } else if (StringUtils.isBlank(entity.getBucketName())) {
-            throw new IllegalArgumentException("bucketName is required");
-        }
-        if (StringUtils.isNotBlank(request.getStorageClass())) {
-            entity.setStorageClass(CategoryStorageClass.valueOf(request.getStorageClass().trim().toUpperCase(Locale.ROOT)));
-        } else if (entity.getStorageClass() == null) {
-            entity.setStorageClass(CategoryStorageClass.STANDARD);
-        }
-        entity.setUiVariant(StringUtils.defaultIfBlank(request.getUiVariant(), "file"));
-        if (request.getEnabled() != null) {
-            entity.setEnabled(request.getEnabled());
-        } else if (entity.getEnabled() == null) {
-            entity.setEnabled(true);
-        }
-        if (request.getSortOrder() != null) {
-            entity.setSortOrder(request.getSortOrder());
-        } else if (entity.getSortOrder() == null) {
-            entity.setSortOrder(0);
-        }
     }
 }
