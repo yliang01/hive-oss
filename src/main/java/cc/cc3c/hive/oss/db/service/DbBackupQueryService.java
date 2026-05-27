@@ -1,8 +1,9 @@
-package cc.cc3c.hive.oss.service;
+package cc.cc3c.hive.oss.db.service;
 
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.oss.controller.vo.DbBackupAckVO;
 import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
+import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.vendor.HiveOss;
 import cc.cc3c.hive.oss.vendor.client.alibaba.AlibabaOssConfig;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;

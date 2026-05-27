@@ -1,4 +1,4 @@
-package cc.cc3c.hive.oss.tools;
+package cc.cc3c.hive.oss.db.h2;
 
 import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;

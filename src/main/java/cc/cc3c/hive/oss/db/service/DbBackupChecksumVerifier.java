@@ -1,4 +1,4 @@
-package cc.cc3c.hive.oss.service;
+package cc.cc3c.hive.oss.db.service;
 
 import org.springframework.stereotype.Service;
 

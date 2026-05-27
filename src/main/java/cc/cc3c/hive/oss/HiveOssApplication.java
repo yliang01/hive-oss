@@ -1,7 +1,7 @@
 package cc.cc3c.hive.oss;
 
-import cc.cc3c.hive.oss.tools.H2RestoreEnvironmentPreparedListener;
-import cc.cc3c.hive.oss.tools.H2TcpServerEnvironmentPreparedListener;
+import cc.cc3c.hive.oss.db.h2.H2RestoreEnvironmentPreparedListener;
+import cc.cc3c.hive.oss.db.h2.H2TcpServerEnvironmentPreparedListener;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 

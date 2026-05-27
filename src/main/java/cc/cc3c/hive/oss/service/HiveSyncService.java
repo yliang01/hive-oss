@@ -8,6 +8,7 @@ import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveSyncVO;
+import cc.cc3c.hive.oss.db.service.DbBackupManifestService;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.extern.slf4j.Slf4j;

@@ -1,9 +1,9 @@
-package cc.cc3c.hive.oss.controller;
+package cc.cc3c.hive.oss.db.controller;
 
 import cc.cc3c.hive.oss.controller.vo.DbBackupAckVO;
 import cc.cc3c.hive.oss.controller.vo.DbBackupListVO;
-import cc.cc3c.hive.oss.service.DbBackupOrchestrationService;
-import cc.cc3c.hive.oss.service.DbBackupQueryService;
+import cc.cc3c.hive.oss.db.service.DbBackupOrchestrationService;
+import cc.cc3c.hive.oss.db.service.DbBackupQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

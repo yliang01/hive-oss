@@ -1,7 +1,6 @@
-package cc.cc3c.hive.oss.service;
+package cc.cc3c.hive.oss.db.service;
 
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
-import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -31,13 +30,6 @@ public class DbBackupManifestService {
         return manifests;
     }
 
-    public List<HiveOssObject> listManifestObjectsFromOss(cc.cc3c.hive.oss.vendor.HiveOss oss, String backupBucket) throws Exception {
-        HiveOssTask listTask = HiveOssTask.createTask()
-                .withBucket(backupBucket)
-                .withKey(DB_BACKUP_KEY_PREFIX);
-        return listManifestObjects(oss.listObjects(listTask));
-    }
-
     static String deriveBatchIdFromManifestKey(String manifestKey) {
         if (isBlank(manifestKey)) {
             return manifestKey;
@@ -50,14 +42,6 @@ public class DbBackupManifestService {
             return key.substring(0, key.length() - MANIFEST_SUFFIX.length());
         }
         return key;
-    }
-
-    static String fileNameFromKey(String key) {
-        if (key == null) {
-            return null;
-        }
-        int idx = key.lastIndexOf('/');
-        return idx >= 0 ? key.substring(idx + 1) : key;
     }
 
     public static String databaseFromBatchId(String batchId) {
