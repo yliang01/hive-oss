@@ -1,6 +1,6 @@
 package cc.cc3c.hive.oss.config;
 
-import cc.cc3c.hive.oss.controller.CategoryContextArgumentResolver;
+import cc.cc3c.hive.oss.web.CategoryContextArgumentResolver;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

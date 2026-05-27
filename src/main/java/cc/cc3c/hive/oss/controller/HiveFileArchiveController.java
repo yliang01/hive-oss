@@ -9,6 +9,7 @@ import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveRestoreStatus;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,7 +33,7 @@ public class HiveFileArchiveController {
 
     @PostMapping("/categories/{category}/files/unfreeze/{*fileKey}")
     public ResponseEntity<HiveUnfreezeStatusVO> unfreezeFiles(CategoryContext category,
-                                                               @PathVariable("fileKey") String fileKey) {
+                                                              @PathVariable("fileKey") String fileKey) {
         Optional<HiveRecord> optional = findArchiveRecord(category, fileKey);
         if (optional.isEmpty()) return ResponseEntity.notFound().build();
         HiveRecord hiveRecord = optional.get();

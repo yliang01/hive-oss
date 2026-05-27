@@ -1,12 +1,12 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadVO;
 import cc.cc3c.hive.oss.service.HiveUploadService;
 import cc.cc3c.hive.oss.service.UploadAlreadyInProgressException;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.fileupload2.core.FileItemInput;
@@ -59,7 +59,7 @@ public class HiveFileUploadController {
                     item.getInputStream().transferTo(OutputStream.nullOutputStream());
                     continue;
                 }
-                fileKey = hiveUploadService.uploadStreaming(category.category(), category.storageClass(), category.uiVariant(), item.getName(), item.getInputStream());
+                fileKey = hiveUploadService.uploadStreaming(category.categoryId(), category.storageClass(), category.uiVariant(), item.getName(), item.getInputStream());
             }
 
             if (fileKey == null) {

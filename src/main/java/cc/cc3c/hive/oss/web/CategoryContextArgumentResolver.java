@@ -1,7 +1,6 @@
-package cc.cc3c.hive.oss.controller;
+package cc.cc3c.hive.oss.web;
 
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
-import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.oss.service.FileCategoryResolver;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.core.MethodParameter;
@@ -46,10 +45,8 @@ public class CategoryContextArgumentResolver implements HandlerMethodArgumentRes
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "bucket name not configured for category: " + requestedCode);
         }
-        CategoryStorageClass storageClass = category.getStorageClass() == null
-                ? CategoryStorageClass.STANDARD : category.getStorageClass();
-        return new CategoryContext(requestedCode, category.getCode(), category.getId(), category,
-                category.getBucketName(), storageClass, category.getUiVariant());
+        return new CategoryContext(requestedCode, category.getCode(), category.getId(),
+                category.getBucketName(), category.getStorageClass(), category.getUiVariant());
     }
 
     @SuppressWarnings("unchecked")

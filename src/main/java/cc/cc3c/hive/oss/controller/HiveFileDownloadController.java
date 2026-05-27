@@ -6,6 +6,7 @@ import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveDownloadStatusVO;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,7 @@ public class HiveFileDownloadController {
 
     @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
     public ResponseEntity<Void> downloadTask(CategoryContext category,
-                                               @PathVariable("fileKey") String fileKey) {
+                                             @PathVariable("fileKey") String fileKey) {
         fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
                 category.categoryId(), fileKey);

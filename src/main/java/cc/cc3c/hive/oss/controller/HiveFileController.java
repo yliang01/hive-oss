@@ -15,6 +15,7 @@ import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveSyncService;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Page;
@@ -56,7 +57,7 @@ public class HiveFileController {
 
     @GetMapping("/categories/{category}/files:batch-get")
     public ResponseEntity<List<HiveRecordVO>> batchGetFiles(CategoryContext category,
-                                                             @RequestParam("fileKeys") List<String> fileKeys) {
+                                                            @RequestParam("fileKeys") List<String> fileKeys) {
         if (fileKeys == null || fileKeys.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }

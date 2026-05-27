@@ -5,6 +5,7 @@ import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveSyncVO;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
@@ -26,20 +27,23 @@ public class HiveSyncService {
     private final HiveOssService hiveOssService;
 
     private final HiveRecordRepository hiveRecordRepository;
+    private final FileCategoryRepository fileCategoryRepository;
     private final HiveSyncSummaryService hiveSyncSummaryService;
 
     public HiveSyncService(HiveOssService hiveOssService,
-                           HiveRecordRepository hiveRecordRepository,
-                           HiveSyncSummaryService hiveSyncSummaryService) {
+                            HiveRecordRepository hiveRecordRepository,
+                            FileCategoryRepository fileCategoryRepository,
+                            HiveSyncSummaryService hiveSyncSummaryService) {
         this.hiveOssService = hiveOssService;
         this.hiveRecordRepository = hiveRecordRepository;
+        this.fileCategoryRepository = fileCategoryRepository;
         this.hiveSyncSummaryService = hiveSyncSummaryService;
     }
 
-    public HiveSyncVO syncRemote(FileCategoryEntity category) throws Exception {
+    public HiveSyncVO syncRemote(Long categoryId, String bucketName, CategoryStorageClass storageClass) throws Exception {
         try {
-            String bucketName = category.getBucketName();
-            Long categoryId = category.getId();
+            FileCategoryEntity category = fileCategoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
             HiveOssTask task = HiveOssTask.createTask().withBucket(bucketName);
             Map<String, HiveOssObject> objectMap = hiveOssService.using(HiveStorageProvider.ALIBABA)
                     .listObjects(task)
@@ -84,7 +88,7 @@ public class HiveSyncService {
                     ossOnly++;
                 }
                 hiveRecord.setLastSyncTime(LocalDateTime.now());
-                if (isArchiveStorageClass(category.getStorageClass())) {
+                if (isArchiveStorageClass(storageClass)) {
                     Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
                     hiveRecord.setDeletable(duration.toDays() > 61);
                 } else {
@@ -113,10 +117,10 @@ public class HiveSyncService {
                     .ossToDbMismatched(ossToDbMismatched)
                     .dbToOssMismatched(dbToOssMismatched)
                     .build();
-            hiveSyncSummaryService.markSuccess(category, result);
+            hiveSyncSummaryService.markSuccess(categoryId, result);
             return result;
         } catch (Exception e) {
-            hiveSyncSummaryService.markFailed(category, e);
+            hiveSyncSummaryService.markFailed(categoryId, e);
             throw e;
         }
     }

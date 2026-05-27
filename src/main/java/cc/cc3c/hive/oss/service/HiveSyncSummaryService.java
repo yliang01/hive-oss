@@ -22,8 +22,8 @@ public class HiveSyncSummaryService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markSuccess(FileCategoryEntity category, HiveSyncVO result) {
-        FileCategoryEntity latest = resolveLatest(category);
+    public void markSuccess(Long categoryId, HiveSyncVO result) {
+        FileCategoryEntity latest = resolveLatest(categoryId);
         latest.setLastSyncTime(result.getSyncedAt());
         latest.setLastSyncStatus(result.getStatus());
         latest.setLastSyncOssTotal(result.getOssTotal());
@@ -36,18 +36,16 @@ public class HiveSyncSummaryService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markFailed(FileCategoryEntity category, Exception e) {
-        FileCategoryEntity latest = resolveLatest(category);
+    public void markFailed(Long categoryId, Exception e) {
+        FileCategoryEntity latest = resolveLatest(categoryId);
         latest.setLastSyncTime(LocalDateTime.now());
         latest.setLastSyncStatus("FAILED");
         latest.setLastSyncMessage(StringUtils.abbreviate(StringUtils.defaultIfBlank(e.getMessage(), e.getClass().getSimpleName()), MAX_MESSAGE_LENGTH));
         fileCategoryRepository.save(latest);
     }
 
-    private FileCategoryEntity resolveLatest(FileCategoryEntity category) {
-        if (category.getId() == null) {
-            return category;
-        }
-        return fileCategoryRepository.findById(category.getId()).orElse(category);
+    private FileCategoryEntity resolveLatest(Long categoryId) {
+        return fileCategoryRepository.findById(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
     }
 }

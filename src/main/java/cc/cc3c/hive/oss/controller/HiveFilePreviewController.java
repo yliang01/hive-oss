@@ -5,6 +5,7 @@ import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.*;
@@ -38,7 +39,7 @@ public class HiveFilePreviewController {
 
     @GetMapping("/categories/{category}/files/preview/thumbnail/{*fileKey}")
     public ResponseEntity<StreamingResponseBody> previewThumbnail(CategoryContext category,
-                                                                    @PathVariable("fileKey") String fileKey) {
+                                                                  @PathVariable("fileKey") String fileKey) {
         String key = HiveRecordVOAssembler.normalizeFileKey(fileKey);
         Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
                 category.categoryId(), key);

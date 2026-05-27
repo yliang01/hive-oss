@@ -5,6 +5,7 @@ import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
@@ -29,6 +30,7 @@ import java.util.Optional;
 public class HiveUploadService {
 
     private final HiveRecordRepository hiveRecordRepository;
+    private final FileCategoryRepository fileCategoryRepository;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
 
@@ -36,9 +38,11 @@ public class HiveUploadService {
     private String imageCacheDir;
 
     public HiveUploadService(HiveRecordRepository hiveRecordRepository,
+                             FileCategoryRepository fileCategoryRepository,
                              HiveOssService hiveOssService,
                              ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
+        this.fileCategoryRepository = fileCategoryRepository;
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
     }
@@ -54,12 +58,14 @@ public class HiveUploadService {
      * under a stable name, uploaded to OSS, then handed to ThumbnailAsyncService without a copy.
      * All other files are streamed directly without local buffering.
      */
-    public String uploadStreaming(FileCategoryEntity category, CategoryStorageClass storageClass,
+    public String uploadStreaming(Long categoryId, CategoryStorageClass storageClass,
                                    String uiVariant, String fileName, InputStream inputStream) throws Exception {
+        FileCategoryEntity category = fileCategoryRepository.findById(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
         String bucketName = category.getBucketName();
         String fileKey = DigestUtils.md5Hex(fileName);
         CategoryStorageClass resolved = resolveStorageClass(storageClass);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(category.getId(), fileKey);
+        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(categoryId, fileKey);
         if (isActiveUploaded(existing)) {
             IOUtils.closeQuietly(inputStream);
             return fileKey;
