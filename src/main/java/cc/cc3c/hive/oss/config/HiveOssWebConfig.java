@@ -1,6 +1,7 @@
 package cc.cc3c.hive.oss.config;
 
 import cc.cc3c.hive.oss.web.CategoryContextArgumentResolver;
+import cc.cc3c.hive.oss.web.CategoryFileContextArgumentResolver;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -11,9 +12,12 @@ import java.util.List;
 @Configuration
 public class HiveOssWebConfig implements WebMvcConfigurer {
     private final CategoryContextArgumentResolver categoryContextArgumentResolver;
+    private final CategoryFileContextArgumentResolver categoryFileContextArgumentResolver;
 
-    public HiveOssWebConfig(CategoryContextArgumentResolver categoryContextArgumentResolver) {
+    public HiveOssWebConfig(CategoryContextArgumentResolver categoryContextArgumentResolver,
+                            CategoryFileContextArgumentResolver categoryFileContextArgumentResolver) {
         this.categoryContextArgumentResolver = categoryContextArgumentResolver;
+        this.categoryFileContextArgumentResolver = categoryFileContextArgumentResolver;
     }
 
     @Override
@@ -28,5 +32,6 @@ public class HiveOssWebConfig implements WebMvcConfigurer {
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(categoryContextArgumentResolver);
+        resolvers.add(categoryFileContextArgumentResolver);
     }
 }
