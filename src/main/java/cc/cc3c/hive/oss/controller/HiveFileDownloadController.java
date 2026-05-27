@@ -4,7 +4,6 @@ import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveDownloadStatusVO;
-import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.extern.slf4j.Slf4j;
@@ -20,23 +19,20 @@ import java.util.Optional;
 public class HiveFileDownloadController {
 
     private final HiveRecordRepository hiveRecordRepository;
-    private final FileGroupService fileGroupService;
     private final HiveDownloadService hiveDownloadService;
 
     public HiveFileDownloadController(HiveRecordRepository hiveRecordRepository,
-                                      FileGroupService fileGroupService,
                                       HiveDownloadService hiveDownloadService) {
         this.hiveRecordRepository = hiveRecordRepository;
-        this.fileGroupService = fileGroupService;
         this.hiveDownloadService = hiveDownloadService;
     }
 
     @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
-    public ResponseEntity<Void> downloadTask(@PathVariable("category") String category,
-                                              @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<Void> downloadTask(CategoryContext category,
+                                               @PathVariable("fileKey") String fileKey) {
         fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
+                category.categoryId(), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -51,11 +47,11 @@ public class HiveFileDownloadController {
     }
 
     @GetMapping("/categories/{category}/files/download-task-status/{*fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(@PathVariable("category") String category,
-                                                                    @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<HiveDownloadStatusVO> downloadTaskStatus(CategoryContext category,
+                                                                     @PathVariable("fileKey") String fileKey) {
         fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
+                category.categoryId(), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -66,7 +62,7 @@ public class HiveFileDownloadController {
         }
         HiveDownloadStatusVO.HiveDownloadStatusVOBuilder builder = HiveDownloadStatusVO.builder()
                 .status(hiveRecord.getDownloadStatus());
-        HiveOssTask downLoadTask = hiveDownloadService.getDownLoadTask(fileKey);
+        HiveOssTask downLoadTask = hiveDownloadService.getDownLoadTask(hiveRecord);
         if (downLoadTask != null) {
             builder.progress(downLoadTask.getProgress());
         }
@@ -80,16 +76,16 @@ public class HiveFileDownloadController {
     }
 
     @PostMapping("/categories/{category}/files/release-local/{*fileKey}")
-    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(@PathVariable("category") String category,
-                                                              @PathVariable("fileKey") String fileKey) {
+    public ResponseEntity<HiveDownloadStatusVO> releaseLocal(CategoryContext category,
+                                                               @PathVariable("fileKey") String fileKey) {
         fileKey = HiveRecordVOAssembler.normalizeFileKey(fileKey);
-        Optional<HiveRecord> optional = hiveRecordRepository.findByBucketNameAndFileKeyAndDeletedIsFalse(
-                fileGroupService.resolveBucket(category), fileKey);
+        Optional<HiveRecord> optional = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(
+                category.categoryId(), fileKey);
         if (optional.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         HiveRecord hiveRecord = optional.get();
-        hiveRecordRepository.updateDownloadStatus(fileKey, null);
+        hiveRecordRepository.updateDownloadStatus(category.categoryId(), fileKey, null);
         File downloadFile = hiveDownloadService.getDownloadFile(hiveRecord);
         boolean deleted = FileUtils.deleteQuietly(downloadFile);
         if (!deleted) {
