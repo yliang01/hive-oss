@@ -118,10 +118,7 @@ public class FileGroupService {
     public void deleteGroup(String groupCode, String categoryCode) {
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
-        long relationCount = fileGroupRecordRepository.countByGroup_Id(group.getId());
-        if (relationCount > 0) {
-            throw new IllegalStateException("group still has linked files");
-        }
+        fileGroupRecordRepository.deleteByGroup_Id(group.getId());
         fileGroupRepository.delete(group);
     }
 
