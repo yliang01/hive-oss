@@ -66,16 +66,22 @@ public class FileGroupService {
             return;
         }
         List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(categoryId, normalizedKeys);
+        if (records.isEmpty()) {
+            return;
+        }
+        List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
+        fileGroupRecordRepository.deleteByHiveRecord_IdIn(recordIds);
         String assignedBy = StringUtils.defaultIfBlank(operator, "system");
-        for (HiveRecord record : records) {
-            Optional<FileGroupRecord> existing = fileGroupRecordRepository.findByHiveRecord_IdAndGroup_Category_Code(record.getId(), categoryCode);
-            FileGroupRecord link = existing.orElseGet(FileGroupRecord::new);
+        LocalDateTime assignedAt = LocalDateTime.now();
+        List<FileGroupRecord> links = records.stream().map(record -> {
+            FileGroupRecord link = new FileGroupRecord();
             link.setGroup(group);
             link.setHiveRecord(record);
             link.setAssignedBy(assignedBy);
-            link.setAssignedAt(LocalDateTime.now());
-            fileGroupRecordRepository.save(link);
-        }
+            link.setAssignedAt(assignedAt);
+            return link;
+        }).toList();
+        fileGroupRecordRepository.saveAll(links);
     }
 
     @Transactional
