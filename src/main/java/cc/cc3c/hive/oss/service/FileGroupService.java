@@ -55,18 +55,17 @@ public class FileGroupService {
     }
 
     @Transactional
-    public void assignFiles(String categoryCode, String groupCode, List<String> fileKeys, String operator) {
+    public void assignFiles(Long categoryId, String categoryCode, String groupCode, List<String> fileKeys, String operator) {
         if (fileKeys == null || fileKeys.isEmpty()) {
             return;
         }
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
-        FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
         List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
         if (normalizedKeys.isEmpty()) {
             return;
         }
-        List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.getId(), normalizedKeys);
+        List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(categoryId, normalizedKeys);
         String assignedBy = StringUtils.defaultIfBlank(operator, "system");
         for (HiveRecord record : records) {
             Optional<FileGroupRecord> existing = fileGroupRecordRepository.findByHiveRecord_IdAndGroup_Category_Code(record.getId(), categoryCode);
