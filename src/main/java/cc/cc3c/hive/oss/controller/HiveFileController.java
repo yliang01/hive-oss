@@ -111,6 +111,13 @@ public class HiveFileController {
         }
         List<HiveRecord> records = hiveRecordRepository
                 .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
+        if (records.size() != normalizedKeys.size()) {
+            return ResponseEntity.badRequest().build();
+        }
+        boolean hasUndeletable = records.stream().anyMatch(record -> !Boolean.TRUE.equals(record.getDeletable()));
+        if (hasUndeletable) {
+            return ResponseEntity.badRequest().build();
+        }
         for (HiveRecord record : records) {
             record.setStatus(HiveRecordStatus.TO_BE_DELETED);
             record.setDeletable(false);
@@ -120,9 +127,21 @@ public class HiveFileController {
     }
 
     @PostMapping("/categories/{category}/files/confirm-delete")
-    public ResponseEntity<Void> confirmDelete(CategoryContext category) {
-        List<HiveRecord> recordList = hiveRecordRepository.findByCategory_IdAndStatusAndDeletedIsFalse(
-                category.categoryId(), HiveRecordStatus.TO_BE_DELETED);
+    public ResponseEntity<Void> confirmDelete(CategoryContext category,
+                                              @RequestBody FileBulkMarkDeleteRequest request) {
+        if (request.getFileKeys() == null || request.getFileKeys().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(request.getFileKeys());
+        if (normalizedKeys.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<HiveRecord> recordList = hiveRecordRepository
+                .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
+        if (recordList.size() != normalizedKeys.size()
+                || recordList.stream().anyMatch(record -> !HiveRecordStatus.TO_BE_DELETED.equals(record.getStatus()))) {
+            return ResponseEntity.badRequest().build();
+        }
         for (HiveRecord record : recordList) {
             HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(record.getId()).orElse(null);
             if (meta != null && StringUtils.isNotBlank(meta.getThumbKey())) {
