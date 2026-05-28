@@ -70,14 +70,14 @@ public class HiveFileController {
 
     @GetMapping("/categories/{category}/files")
     public HiveRecordsVO getFiles(CategoryContext category,
-                                  @RequestParam(value = "groupId", required = false) Long groupId,
+                                  @RequestParam(value = "groupCode", required = false) String groupCode,
                                   @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam("page") Integer page,
                                   @RequestParam("pageSize") Integer pageSize) {
         Long categoryId = category.categoryId();
         Page<HiveRecord> pageResult = hiveRecordQueryService.query(categoryId,
-                new FileQueryParams(groupId, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize));
+                new FileQueryParams(groupCode, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize));
 
         List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
         return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();

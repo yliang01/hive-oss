@@ -40,8 +40,8 @@ public class HiveRecordQueryService {
                 predicates.add(cb.like(cb.lower(root.get("fileName")), "%" + keyword.toLowerCase() + "%"));
             }
 
-            if (params.groupId() != null) {
-                predicates.add(cb.exists(groupRecordSubquery(root.get("id"), categoryId, params.groupId(), query.subquery(Long.class), cb)));
+            if (StringUtils.isNotBlank(params.groupCode())) {
+                predicates.add(cb.exists(groupRecordSubquery(root.get("id"), categoryId, params.groupCode(), query.subquery(Long.class), cb)));
             } else if (params.ungroupedOnly()) {
                 predicates.add(cb.not(cb.exists(groupRecordSubquery(root.get("id"), categoryId, null, query.subquery(Long.class), cb))));
             }
@@ -52,15 +52,15 @@ public class HiveRecordQueryService {
 
     private Subquery<Long> groupRecordSubquery(jakarta.persistence.criteria.Path<Integer> recordId,
                                                Long categoryId,
-                                               Long groupId,
+                                               String groupCode,
                                                Subquery<Long> subquery,
                                                jakarta.persistence.criteria.CriteriaBuilder cb) {
         var groupRecord = subquery.from(FileGroupRecord.class);
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(cb.equal(groupRecord.get("hiveRecord").get("id"), recordId));
         predicates.add(cb.equal(groupRecord.get("group").get("category").get("id"), categoryId));
-        if (groupId != null) {
-            predicates.add(cb.equal(groupRecord.get("group").get("id"), groupId));
+        if (StringUtils.isNotBlank(groupCode)) {
+            predicates.add(cb.equal(cb.lower(groupRecord.get("group").get("groupCode")), groupCode.toLowerCase()));
         }
         return subquery.select(groupRecord.get("id")).where(predicates.toArray(Predicate[]::new));
     }

@@ -87,7 +87,7 @@ public class HiveRecordVOAssembler {
                 .category(context.code())
                 .categoryLabel(context.name())
                 .uiVariant(context.uiVariant())
-                .groupId(groupRecord == null ? null : groupRecord.getGroup().getId())
+                .groupCode(groupRecord == null ? null : groupRecord.getGroup().getGroupCode())
                 .groupName(groupRecord == null ? null : groupRecord.getGroup().getGroupName())
                 .fileName(record.getFileName())
                 .fileKey(record.getFileKey())

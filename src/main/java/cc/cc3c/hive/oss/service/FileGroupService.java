@@ -41,11 +41,9 @@ public class FileGroupService {
         this.fileCategoryService = fileCategoryService;
     }
 
-    public List<FileGroupVO> listGroups(String categoryCode, boolean includeDisabled) {
-        List<FileGroup> groups = includeDisabled
-                ? fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode)
-                : fileGroupRepository.findByCategory_CodeAndEnabledTrueOrderBySortOrderAscIdAsc(categoryCode);
-        return groups.stream().map(this::toGroupVO).toList();
+    public List<FileGroupVO> listGroups(String categoryCode) {
+        return fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode)
+                .stream().map(this::toGroupVO).toList();
     }
 
     public Map<Integer, FileGroupRecord> findGroupRecordMapByRecordIds(Collection<Integer> recordIds) {
@@ -57,11 +55,11 @@ public class FileGroupService {
     }
 
     @Transactional
-    public void assignFiles(String categoryCode, Long groupId, List<String> fileKeys, String operator) {
+    public void assignFiles(String categoryCode, String groupCode, List<String> fileKeys, String operator) {
         if (fileKeys == null || fileKeys.isEmpty()) {
             return;
         }
-        FileGroup group = fileGroupRepository.findByIdAndCategory_CodeAndEnabledTrue(groupId, categoryCode)
+        FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
         FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
         List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
@@ -94,43 +92,33 @@ public class FileGroupService {
         group.setCategory(category);
         group.setGroupCode(request.getGroupCode().trim());
         group.setGroupName(request.getGroupName().trim());
-        group.setGroupDesc(StringUtils.trimToNull(request.getGroupDesc()));
         group.setSortOrder(request.getSortOrder() == null ? 0 : request.getSortOrder());
-        group.setEnabled(request.getEnabled() == null || request.getEnabled());
         group.setCreatedAt(LocalDateTime.now());
         group.setUpdatedAt(LocalDateTime.now());
         return toGroupVO(fileGroupRepository.save(group));
     }
 
     @Transactional
-    public FileGroupVO updateGroup(Long groupId, String categoryCode, GroupUpsertRequest request) {
-        FileGroup group = fileGroupRepository.findByIdAndCategory_Code(groupId, categoryCode)
+    public FileGroupVO updateGroup(String groupCode, String categoryCode, GroupUpsertRequest request) {
+        FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
-        if (StringUtils.isNotBlank(request.getGroupCode()) && !StringUtils.equalsIgnoreCase(group.getGroupCode(), request.getGroupCode())) {
-            if (fileGroupRepository.existsByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, request.getGroupCode())) {
-                throw new IllegalArgumentException("group code exists in category");
-            }
-            group.setGroupCode(request.getGroupCode().trim());
+        if (StringUtils.isBlank(request.getGroupName())) {
+            throw new IllegalArgumentException("groupName is required");
         }
-        if (StringUtils.isNotBlank(request.getGroupName())) {
-            group.setGroupName(request.getGroupName().trim());
+        if (request.getSortOrder() == null) {
+            throw new IllegalArgumentException("sortOrder is required");
         }
-        group.setGroupDesc(StringUtils.trimToNull(request.getGroupDesc()));
-        if (request.getSortOrder() != null) {
-            group.setSortOrder(request.getSortOrder());
-        }
-        if (request.getEnabled() != null) {
-            group.setEnabled(request.getEnabled());
-        }
+        group.setGroupName(request.getGroupName().trim());
+        group.setSortOrder(request.getSortOrder());
         group.setUpdatedAt(LocalDateTime.now());
         return toGroupVO(fileGroupRepository.save(group));
     }
 
     @Transactional
-    public void deleteGroup(Long groupId, String categoryCode) {
-        FileGroup group = fileGroupRepository.findByIdAndCategory_Code(groupId, categoryCode)
+    public void deleteGroup(String groupCode, String categoryCode) {
+        FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
-        long relationCount = fileGroupRecordRepository.countByGroup_Id(groupId);
+        long relationCount = fileGroupRecordRepository.countByGroup_Id(group.getId());
         if (relationCount > 0) {
             throw new IllegalStateException("group still has linked files");
         }
@@ -139,13 +127,10 @@ public class FileGroupService {
 
     private FileGroupVO toGroupVO(FileGroup group) {
         return FileGroupVO.builder()
-                .groupId(group.getId())
                 .categoryCode(group.getCategory().getCode())
                 .groupCode(group.getGroupCode())
                 .groupName(group.getGroupName())
-                .groupDesc(group.getGroupDesc())
                 .sortOrder(group.getSortOrder())
-                .enabled(group.getEnabled())
                 .build();
     }
 }

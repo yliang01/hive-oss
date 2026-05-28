@@ -20,9 +20,8 @@ public class HiveGroupController {
     }
 
     @GetMapping
-    public List<FileGroupVO> getGroups(@PathVariable("category") String category,
-                                       @RequestParam(value = "includeDisabled", defaultValue = "false") boolean includeDisabled) {
-        return fileGroupService.listGroups(category, includeDisabled);
+    public List<FileGroupVO> getGroups(@PathVariable("category") String category) {
+        return fileGroupService.listGroups(category);
     }
 
     @PostMapping
@@ -30,24 +29,24 @@ public class HiveGroupController {
         return fileGroupService.createGroup(category, request);
     }
 
-    @PutMapping("/{groupId}")
+    @PutMapping("/{groupCode}")
     public FileGroupVO updateGroup(@PathVariable("category") String category,
-                                   @PathVariable("groupId") Long groupId,
+                                   @PathVariable("groupCode") String groupCode,
                                    @RequestBody GroupUpsertRequest request) {
-        return fileGroupService.updateGroup(groupId, category, request);
+        return fileGroupService.updateGroup(groupCode, category, request);
     }
 
-    @DeleteMapping("/{groupId}")
-    public ResponseEntity<Void> deleteGroup(@PathVariable("category") String category, @PathVariable("groupId") Long groupId) {
-        fileGroupService.deleteGroup(groupId, category);
+    @DeleteMapping("/{groupCode}")
+    public ResponseEntity<Void> deleteGroup(@PathVariable("category") String category, @PathVariable("groupCode") String groupCode) {
+        fileGroupService.deleteGroup(groupCode, category);
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/{groupId}/files:assign")
+    @PostMapping("/{groupCode}/files:assign")
     public ResponseEntity<Void> assignFilesToGroup(@PathVariable("category") String category,
-                                                   @PathVariable("groupId") Long groupId,
+                                                   @PathVariable("groupCode") String groupCode,
                                                    @RequestBody FileGroupAssignRequest request) {
-        fileGroupService.assignFiles(category, groupId, request.getFileKeys(), request.getOperator());
+        fileGroupService.assignFiles(category, groupCode, request.getFileKeys(), request.getOperator());
         return ResponseEntity.ok().build();
     }
 }

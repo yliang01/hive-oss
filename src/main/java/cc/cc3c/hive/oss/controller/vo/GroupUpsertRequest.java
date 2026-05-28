@@ -6,7 +6,5 @@ import lombok.Data;
 public class GroupUpsertRequest {
     private String groupCode;
     private String groupName;
-    private String groupDesc;
     private Integer sortOrder;
-    private Boolean enabled;
 }

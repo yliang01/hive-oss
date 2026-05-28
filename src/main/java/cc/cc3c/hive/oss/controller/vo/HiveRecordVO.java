@@ -11,7 +11,7 @@ public class HiveRecordVO {
     private String category;
     private String categoryLabel;
     private String uiVariant;
-    private Long groupId;
+    private String groupCode;
     private String groupName;
     private String fileName;
     private String fileKey;
