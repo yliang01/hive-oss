@@ -65,7 +65,7 @@ public class HiveUploadService {
         String bucketName = category.getBucketName();
         String fileKey = DigestUtils.md5Hex(fileName);
         CategoryStorageClass resolved = resolveStorageClass(storageClass);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(categoryId, fileKey);
+        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(categoryId, fileKey);
         if (isActiveUploaded(existing)) {
             IOUtils.closeQuietly(inputStream);
             return fileKey;
@@ -89,8 +89,8 @@ public class HiveUploadService {
 
     public HiveUploadCheckVO checkUpload(Long categoryId, String fileName) {
         String fileKey = DigestUtils.md5Hex(fileName);
-        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKey(categoryId, fileKey);
-        if (existing.isEmpty() || Boolean.TRUE.equals(existing.get().getDeleted())) {
+        Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(categoryId, fileKey);
+        if (existing.isEmpty()) {
             return HiveUploadCheckVO.builder()
                     .exists(false)
                     .fileKey(fileKey)
@@ -175,7 +175,6 @@ public class HiveUploadService {
 
     private boolean isActiveUploaded(Optional<HiveRecord> existing) {
         return existing.isPresent()
-                && !Boolean.TRUE.equals(existing.get().getDeleted())
                 && HiveRecordStatus.UPLOADED.equals(existing.get().getStatus());
     }
 
