@@ -143,10 +143,12 @@ public class HiveFileController {
             return ResponseEntity.badRequest().build();
         }
         for (HiveRecord record : recordList) {
+            String bucketName = record.getCategory().getBucketName();
+            String fileKey = record.getFileKey();
             HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(record.getId()).orElse(null);
             if (meta != null && StringUtils.isNotBlank(meta.getThumbKey())) {
                 HiveOssTask thumbTask = HiveOssTask.createTask()
-                        .withBucket(record.getCategory().getBucketName())
+                        .withBucket(bucketName)
                         .withKey(meta.getThumbKey());
                 try {
                     hiveOssService.using(record.getProvider()).delete(thumbTask);
@@ -159,8 +161,8 @@ public class HiveFileController {
                 imageMetaRepository.delete(meta);
             }
             HiveOssTask hiveOssTask = HiveOssTask.createTask()
-                    .withBucket(record.getCategory().getBucketName())
-                    .withKey(record.getFileKey());
+                    .withBucket(bucketName)
+                    .withKey(fileKey);
             try {
                 hiveOssService.using(record.getProvider()).delete(hiveOssTask);
             } catch (Exception e) {
@@ -168,7 +170,8 @@ public class HiveFileController {
                 return ResponseEntity.internalServerError().build();
             }
             fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
-            thumbnailAsyncService.deleteCacheFiles(record.getFileKey());
+            thumbnailAsyncService.deleteCacheFiles(fileKey);
+            record.setCategory(null);
             record.setDeleted(true);
             hiveRecordRepository.save(record);
         }
