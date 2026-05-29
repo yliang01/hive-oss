@@ -3,11 +3,11 @@ package cc.cc3c.hive.oss.service;
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
-import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
+import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -17,11 +17,7 @@ import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.Optional;
 
 @Slf4j
@@ -38,10 +34,10 @@ public class HiveUploadService {
     private String imageCacheDir;
 
     public HiveUploadService(HiveRecordRepository hiveRecordRepository,
-                              FileCategoryRepository fileCategoryRepository,
-                              HiveOssService hiveOssService,
-                              ThumbnailAsyncService thumbnailAsyncService,
-                              HiveRecordStateService stateService) {
+                             FileCategoryRepository fileCategoryRepository,
+                             HiveOssService hiveOssService,
+                             ThumbnailAsyncService thumbnailAsyncService,
+                             HiveRecordStateService stateService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryRepository = fileCategoryRepository;
         this.hiveOssService = hiveOssService;
@@ -61,7 +57,7 @@ public class HiveUploadService {
      * All other files are streamed directly without local buffering.
      */
     public String uploadStreaming(Long categoryId, CategoryStorageClass storageClass,
-                                   String uiVariant, String fileName, InputStream inputStream) throws Exception {
+                                  String uiVariant, String fileName, InputStream inputStream) throws Exception {
         FileCategoryEntity category = fileCategoryRepository.findById(categoryId)
                 .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
         String bucketName = category.getBucketName();
@@ -105,8 +101,8 @@ public class HiveUploadService {
     }
 
     private void doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
-                                   CategoryStorageClass storageClass, boolean generateThumbnail,
-                                   InputStream inputStream) throws Exception {
+                                  CategoryStorageClass storageClass, boolean generateThumbnail,
+                                  InputStream inputStream) throws Exception {
         File cacheFile = new File(imageCacheDir, fileKey + "_src");
         try {
             try (InputStream in = inputStream; FileOutputStream out = new FileOutputStream(cacheFile)) {
@@ -121,7 +117,7 @@ public class HiveUploadService {
                         .withEncryption(fileName);
                 hiveOssService.using(hiveRecord.getProvider()).uploadSync(task);
             }
-            markUploaded(hiveRecord, storageClass);
+            refreshUploadedRecord(hiveRecord, storageClass);
             if (generateThumbnail) {
                 thumbnailAsyncService.submitAsync(hiveRecord, fileKey);
             }
@@ -132,7 +128,7 @@ public class HiveUploadService {
     }
 
     private void doStreamUpload(HiveRecord hiveRecord, String fileKey, String fileName,
-                                 CategoryStorageClass storageClass, InputStream inputStream) throws Exception {
+                                CategoryStorageClass storageClass, InputStream inputStream) throws Exception {
         HiveOssTask task = HiveOssTask.createTask()
                 .withBucket(hiveRecord.getCategory().getBucketName())
                 .withKey(fileKey)
@@ -140,12 +136,25 @@ public class HiveUploadService {
                 .withStorageClass(storageClass.name())
                 .withEncryption(fileName);
         hiveOssService.using(hiveRecord.getProvider()).uploadStreaming(task);
-        markUploaded(hiveRecord, storageClass);
+        refreshUploadedRecord(hiveRecord, storageClass);
     }
 
-    private void markUploaded(HiveRecord hiveRecord, CategoryStorageClass storageClass) {
-        stateService.markUploaded(hiveRecord, storageClass);
-        hiveRecordRepository.save(hiveRecord);
+    private void refreshUploadedRecord(HiveRecord hiveRecord, CategoryStorageClass storageClass) {
+        try {
+            HiveOssTask metadataTask = HiveOssTask.createTask()
+                    .withBucket(hiveRecord.getCategory().getBucketName())
+                    .withKey(hiveRecord.getFileKey());
+            HiveOssObject metadata = hiveOssService.using(hiveRecord.getProvider()).getObjectMetadata(metadataTask);
+            if (metadata == null || metadata.getLastModified() == null) {
+                throw new IllegalStateException("uploaded object metadata is incomplete");
+            }
+            stateService.markUploaded(hiveRecord, hiveRecord.getCategory(), metadata, storageClass);
+            hiveRecordRepository.save(hiveRecord);
+        } catch (Exception e) {
+            log.warn("refresh uploaded object metadata failed, fileKey={}", hiveRecord.getFileKey(), e);
+            stateService.markUploaded(hiveRecord, storageClass);
+            hiveRecordRepository.save(hiveRecord);
+        }
     }
 
     private void markFailed(HiveRecord hiveRecord) {

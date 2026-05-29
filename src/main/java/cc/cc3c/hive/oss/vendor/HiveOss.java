@@ -10,6 +10,8 @@ public interface HiveOss {
 
     boolean doesObjectExist(HiveOssTask task);
 
+    HiveOssObject getObjectMetadata(HiveOssTask task) throws Exception;
+
     List<HiveOssObject> listObjects(HiveOssTask task) throws Exception;
 
     void uploadSync(HiveOssTask task) throws Exception;

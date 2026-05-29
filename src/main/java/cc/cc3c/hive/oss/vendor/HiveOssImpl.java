@@ -63,6 +63,11 @@ public class HiveOssImpl implements HiveOss, InitializingBean {
     }
 
     @Override
+    public HiveOssObject getObjectMetadata(HiveOssTask task) throws Exception {
+        return ossClient.getObjectMetadata(task);
+    }
+
+    @Override
     public List<HiveOssObject> listObjects(HiveOssTask task) throws Exception {
         return ossClient.listObject(task);
     }

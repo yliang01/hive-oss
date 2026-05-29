@@ -25,6 +25,8 @@ public interface HiveOssClient {
 
     boolean doesObjectExist(HiveOssTask task);
 
+    HiveOssObject getObjectMetadata(HiveOssTask task);
+
     void putObject(HiveOssTask task);
 
     HiveOssObject getObject(HiveOssTask task);

@@ -104,6 +104,16 @@ public class TencentOssClient implements HiveOssClient {
     }
 
     @Override
+    public HiveOssObject getObjectMetadata(HiveOssTask task) {
+        ObjectMetadata metadata = ossClient.getObjectMetadata(task.getBucket(), task.getKey());
+        HiveOssObject hiveOssObject = new HiveOssObject();
+        hiveOssObject.setFileKey(task.getKey());
+        hiveOssObject.setSize(metadata.getContentLength());
+        hiveOssObject.setLastModified(metadata.getLastModified());
+        return hiveOssObject;
+    }
+
+    @Override
     public void putObject(HiveOssTask task) {
 
     }
@@ -152,5 +162,4 @@ public class TencentOssClient implements HiveOssClient {
         ossClient.deleteObject(task.getBucket(), task.getKey());
     }
 }
-
 

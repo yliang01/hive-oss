@@ -135,6 +135,19 @@ public class AlibabaOssClient implements HiveOssClient {
         return ossClient.doesObjectExist(task.getBucket(), task.getKey());
     }
 
+    @Override
+    public HiveOssObject getObjectMetadata(HiveOssTask task) {
+        ObjectMetadata metadata = ossClient.getObjectMetadata(task.getBucket(), task.getKey());
+        HiveOssObject hiveOssObject = new HiveOssObject();
+        hiveOssObject.setFileKey(task.getKey());
+        hiveOssObject.setSize(metadata.getContentLength());
+        hiveOssObject.setLastModified(metadata.getLastModified());
+        if (metadata.getObjectStorageClass() != null) {
+            hiveOssObject.setStorageClass(metadata.getObjectStorageClass().toString());
+        }
+        return hiveOssObject;
+    }
+
     public void putObject(HiveOssTask task) {
         PutObjectRequest request = new PutObjectRequest(task.getBucket(), task.getKey(), task.getInputStream());
         StorageClass storageClass = resolveStorageClass(task.getStorageClass());

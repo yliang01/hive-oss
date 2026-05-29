@@ -52,6 +52,37 @@ class HiveRecordStateServiceTest {
     }
 
     @Test
+    void uploadSuccessCanRefreshRemoteMetadata() {
+        HiveRecord record = new HiveRecord();
+        FileCategoryEntity category = category();
+        HiveOssObject object = object("key-1");
+        object.setSize(512L);
+
+        stateService.startUpload(record, category, "a.txt", "key-1");
+        stateService.markUploaded(record, category, object, CategoryStorageClass.STANDARD);
+
+        assertThat(record.getStatus()).isEqualTo(HiveRecordStatus.UPLOADED);
+        assertThat(record.getCategory()).isSameAs(category);
+        assertThat(record.getSize()).isEqualTo(512L);
+        assertThat(record.getUpdateTime()).isNotNull();
+        assertThat(record.getLastSyncTime()).isNotNull();
+        assertThat(record.getDeletable()).isTrue();
+    }
+
+    @Test
+    void uploadSuccessWithArchiveUsesRemoteTimeForDeletablePolicy() {
+        HiveRecord record = new HiveRecord();
+        HiveOssObject object = object("key-1");
+        object.setLastModified(new Date(0));
+
+        stateService.startUpload(record, category(), "a.txt", "key-1");
+        stateService.markUploaded(record, category(), object, CategoryStorageClass.ARCHIVE);
+
+        assertThat(record.getStatus()).isEqualTo(HiveRecordStatus.UPLOADED);
+        assertThat(record.getDeletable()).isTrue();
+    }
+
+    @Test
     void syncDoesNotMutatePendingDelete() {
         HiveRecord record = record(HiveRecordStatus.TO_BE_DELETED);
         record.setDeletable(false);
