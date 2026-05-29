@@ -31,6 +31,7 @@ public class HiveSyncSummaryService {
         latest.setLastSyncOssToDbMatched(result.getOssToDbMatched());
         latest.setLastSyncOssToDbMismatched(result.getOssToDbMismatched());
         latest.setLastSyncDbToOssMismatched(result.getDbToOssMismatched());
+        latest.setLastSyncSkipped(result.getSkipped());
         latest.setLastSyncMessage(result.getMessage());
         fileCategoryRepository.save(latest);
     }

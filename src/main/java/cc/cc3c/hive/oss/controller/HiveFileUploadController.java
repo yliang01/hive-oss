@@ -1,11 +1,9 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckRequest;
-import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.controller.vo.HiveUploadVO;
 import cc.cc3c.hive.oss.service.HiveUploadService;
-import cc.cc3c.hive.oss.service.UploadAlreadyInProgressException;
+import cc.cc3c.hive.oss.service.HiveRecordStateTransitionException;
 import cc.cc3c.hive.oss.web.CategoryContext;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -39,11 +37,10 @@ public class HiveFileUploadController {
         if (request == null || StringUtils.isBlank(request.getFileName())) {
             return ResponseEntity.badRequest().body(Map.of("error", "fileName is required"));
         }
-        HiveUploadCheckVO result = hiveUploadService.checkUpload(category.categoryId(), request.getFileName());
-        if (HiveRecordStatus.UPLOADING.equals(result.getStatus())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(result);
+        if (!hiveUploadService.canUpload(category.categoryId(), request.getFileName())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/categories/{category}/files/upload")
@@ -66,7 +63,7 @@ public class HiveFileUploadController {
                 return ResponseEntity.badRequest().body(Map.of("error", "请上传一个文件"));
             }
             return ResponseEntity.ok(HiveUploadVO.builder().fileKey(fileKey).build());
-        } catch (UploadAlreadyInProgressException e) {
+        } catch (HiveRecordStateTransitionException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("upload failed", e);

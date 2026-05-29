@@ -7,7 +7,6 @@ import cc.cc3c.hive.domain.model.HiveStorageProvider;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.controller.vo.HiveUploadCheckVO;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import jakarta.annotation.PostConstruct;
@@ -33,18 +32,21 @@ public class HiveUploadService {
     private final FileCategoryRepository fileCategoryRepository;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
+    private final HiveRecordStateService stateService;
 
     @Value("${hive.imageCacheDir}")
     private String imageCacheDir;
 
     public HiveUploadService(HiveRecordRepository hiveRecordRepository,
-                             FileCategoryRepository fileCategoryRepository,
-                             HiveOssService hiveOssService,
-                             ThumbnailAsyncService thumbnailAsyncService) {
+                              FileCategoryRepository fileCategoryRepository,
+                              HiveOssService hiveOssService,
+                              ThumbnailAsyncService thumbnailAsyncService,
+                              HiveRecordStateService stateService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryRepository = fileCategoryRepository;
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
+        this.stateService = stateService;
     }
 
     @PostConstruct
@@ -70,9 +72,15 @@ public class HiveUploadService {
             IOUtils.closeQuietly(inputStream);
             return fileKey;
         }
-        // startUploadRecord is outside the try block: UploadAlreadyInProgressException propagates
+        // startUploadRecord is outside the upload try block: rejected state transitions propagate
         // without triggering markFailed because no save has occurred at that point.
-        HiveRecord hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), category, fileName, fileKey);
+        HiveRecord hiveRecord;
+        try {
+            hiveRecord = startUploadRecord(existing.orElseGet(HiveRecord::new), category, fileName, fileKey);
+        } catch (RuntimeException e) {
+            IOUtils.closeQuietly(inputStream);
+            throw e;
+        }
         try {
             boolean thumbnail = thumbnailAsyncService.isThumbnailEligible(uiVariant, fileName);
             if (thumbnail) {
@@ -87,22 +95,13 @@ public class HiveUploadService {
         }
     }
 
-    public HiveUploadCheckVO checkUpload(Long categoryId, String fileName) {
+    public boolean canUpload(Long categoryId, String fileName) {
         String fileKey = DigestUtils.md5Hex(fileName);
         Optional<HiveRecord> existing = hiveRecordRepository.findByCategory_IdAndFileKeyAndDeletedIsFalse(categoryId, fileKey);
         if (existing.isEmpty()) {
-            return HiveUploadCheckVO.builder()
-                    .exists(false)
-                    .fileKey(fileKey)
-                    .status(null)
-                    .build();
+            return true;
         }
-        HiveRecord record = existing.get();
-        return HiveUploadCheckVO.builder()
-                .exists(HiveRecordStatus.UPLOADED.equals(record.getStatus()))
-                .fileKey(fileKey)
-                .status(record.getStatus())
-                .build();
+        return HiveRecordStatus.FAILED.equals(existing.get().getStatus());
     }
 
     private void doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
@@ -145,31 +144,17 @@ public class HiveUploadService {
     }
 
     private void markUploaded(HiveRecord hiveRecord, CategoryStorageClass storageClass) {
-        hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
-        hiveRecord.setDeletable(isDeletableAfterUpload(storageClass));
+        stateService.markUploaded(hiveRecord, storageClass);
         hiveRecordRepository.save(hiveRecord);
     }
 
     private void markFailed(HiveRecord hiveRecord) {
-        hiveRecord.setStatus(HiveRecordStatus.FAILED);
+        stateService.markUploadFailed(hiveRecord);
         hiveRecordRepository.save(hiveRecord);
     }
 
     private HiveRecord startUploadRecord(HiveRecord hiveRecord, FileCategoryEntity category, String fileName, String fileKey) {
-        if (hiveRecord.getId() != null
-                && !Boolean.TRUE.equals(hiveRecord.getDeleted())
-                && HiveRecordStatus.UPLOADING.equals(hiveRecord.getStatus())) {
-            throw new UploadAlreadyInProgressException(fileName);
-        }
-        hiveRecord.setFileName(fileName);
-        hiveRecord.setFileKey(fileKey);
-        hiveRecord.setZipped(false);
-        hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-        hiveRecord.setCategory(category);
-        hiveRecord.setStatus(HiveRecordStatus.UPLOADING);
-        hiveRecord.setDeleted(false);
-        hiveRecord.setDeletable(false);
-        hiveRecord.setDownloadStatus(null);
+        stateService.startUpload(hiveRecord, category, fileName, fileKey);
         return hiveRecordRepository.save(hiveRecord);
     }
 
@@ -180,9 +165,5 @@ public class HiveUploadService {
 
     private CategoryStorageClass resolveStorageClass(CategoryStorageClass storageClass) {
         return storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
-    }
-
-    private boolean isDeletableAfterUpload(CategoryStorageClass storageClass) {
-        return resolveStorageClass(storageClass) != CategoryStorageClass.ARCHIVE;
     }
 }

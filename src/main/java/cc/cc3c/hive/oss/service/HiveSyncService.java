@@ -4,7 +4,6 @@ import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveStorageProvider;
-import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveSyncVO;
@@ -14,11 +13,11 @@ import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,18 +29,28 @@ public class HiveSyncService {
     private final HiveRecordRepository hiveRecordRepository;
     private final FileCategoryRepository fileCategoryRepository;
     private final HiveSyncSummaryService hiveSyncSummaryService;
+    private final HiveRecordStateService stateService;
+    private final ConcurrentHashMap<Long, ReentrantLock> syncLocks = new ConcurrentHashMap<>();
 
     public HiveSyncService(HiveOssService hiveOssService,
                             HiveRecordRepository hiveRecordRepository,
                             FileCategoryRepository fileCategoryRepository,
-                            HiveSyncSummaryService hiveSyncSummaryService) {
+                            HiveSyncSummaryService hiveSyncSummaryService,
+                            HiveRecordStateService stateService) {
         this.hiveOssService = hiveOssService;
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryRepository = fileCategoryRepository;
         this.hiveSyncSummaryService = hiveSyncSummaryService;
+        this.stateService = stateService;
     }
 
     public HiveSyncVO syncRemote(Long categoryId, String bucketName, CategoryStorageClass storageClass) throws Exception {
+        ReentrantLock lock = syncLocks.computeIfAbsent(categoryId, ignored -> new ReentrantLock());
+        if (!lock.tryLock()) {
+            FileCategoryEntity category = fileCategoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
+            throw new SyncAlreadyRunningException(category.getCode());
+        }
         try {
             FileCategoryEntity category = fileCategoryRepository.findById(categoryId)
                     .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryId));
@@ -55,57 +64,26 @@ public class HiveSyncService {
             List<HiveRecord> recordList = hiveRecordRepository.findByCategory_IdAndDeletedIsFalse(categoryId);
             Map<String, HiveRecord> recordMap = recordList.stream().collect(Collectors.toMap(HiveRecord::getFileKey, v -> v));
 
-            int ossOnly = 0;
-            int ossToDbMatched = 0;
-            int ossToDbMismatched = 0;
+            SyncCounters counters = new SyncCounters();
             for (Map.Entry<String, HiveOssObject> entry : objectMap.entrySet()) {
                 String fileKey = entry.getKey();
                 HiveOssObject hiveOssObject = entry.getValue();
                 HiveRecord hiveRecord = recordMap.get(fileKey);
                 if (hiveRecord != null) {
-                    if (HiveRecordStatus.UPLOADED.equals(hiveRecord.getStatus())) {
-                        hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-                        hiveRecord.setCategory(category);
-                        hiveRecord.setSize(hiveOssObject.getSize());
-                        hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
-                        hiveRecord.setStatus(HiveRecordStatus.UPLOADED);
-                        ossToDbMatched++;
-                    } else if (HiveRecordStatus.OSS_ONLY.equals(hiveRecord.getStatus())) {
-                        ossOnly++;
-                    } else {
-                        ossToDbMismatched++;
-                    }
+                    counters.add(stateService.applyRemoteFound(hiveRecord, category, hiveOssObject, storageClass));
                 } else {
-                    hiveRecord = new HiveRecord();
-                    hiveRecord.setFileName("");
-                    hiveRecord.setFileKey(fileKey);
-                    hiveRecord.setZipped(false);
-                    hiveRecord.setProvider(HiveStorageProvider.ALIBABA);
-                    hiveRecord.setCategory(category);
-                    hiveRecord.setSize(hiveOssObject.getSize());
-                    hiveRecord.setUpdateTime(hiveOssObject.getLastModified().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
-                    hiveRecord.setStatus(HiveRecordStatus.OSS_ONLY);
+                    hiveRecord = stateService.discoverRemoteObject(category, hiveOssObject);
                     recordList.add(hiveRecord);
-                    ossOnly++;
-                }
-                hiveRecord.setLastSyncTime(LocalDateTime.now());
-                if (isArchiveStorageClass(storageClass)) {
-                    Duration duration = Duration.between(hiveRecord.getUpdateTime(), LocalDateTime.now());
-                    hiveRecord.setDeletable(duration.toDays() > 61);
-                } else {
-                    hiveRecord.setDeletable(true);
+                    counters.add(HiveRecordStateService.SyncOutcome.OSS_ONLY);
                 }
             }
 
-            int dbToOssMismatched = 0;
             for (Map.Entry<String, HiveRecord> entry : recordMap.entrySet()) {
                 String fileKey = entry.getKey();
                 HiveOssObject hiveOssObject = objectMap.get(fileKey);
                 if (hiveOssObject == null) {
                     HiveRecord hiveRecord = entry.getValue();
-                    hiveRecord.setStatus(HiveRecordStatus.DB_ONLY);
-                    hiveRecord.setDeletable(true);
-                    dbToOssMismatched++;
+                    counters.add(stateService.applyRemoteMissing(hiveRecord));
                 }
             }
             hiveRecordRepository.saveAll(recordList);
@@ -113,16 +91,19 @@ public class HiveSyncService {
                     .status("SUCCESS")
                     .syncedAt(LocalDateTime.now())
                     .ossTotal(objectMap.size())
-                    .ossOnly(ossOnly)
-                    .ossToDbMatched(ossToDbMatched)
-                    .ossToDbMismatched(ossToDbMismatched)
-                    .dbToOssMismatched(dbToOssMismatched)
+                    .ossOnly(counters.ossOnly)
+                    .ossToDbMatched(counters.ossToDbMatched)
+                    .ossToDbMismatched(counters.ossToDbMismatched)
+                    .dbToOssMismatched(counters.dbToOssMismatched)
+                    .skipped(counters.skipped)
                     .build();
             hiveSyncSummaryService.markSuccess(categoryId, result);
             return result;
         } catch (Exception e) {
             hiveSyncSummaryService.markFailed(categoryId, e);
             throw e;
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -138,7 +119,22 @@ public class HiveSyncService {
         return fileKey != null && fileKey.startsWith(THUMB_PREFIX) && fileKey.endsWith(THUMB_SUFFIX);
     }
 
-    private boolean isArchiveStorageClass(CategoryStorageClass storageClass) {
-        return storageClass == CategoryStorageClass.ARCHIVE;
+    private static class SyncCounters {
+        private int ossOnly;
+        private int ossToDbMatched;
+        private int ossToDbMismatched;
+        private int dbToOssMismatched;
+        private int skipped;
+
+        private void add(HiveRecordStateService.SyncOutcome outcome) {
+            switch (outcome) {
+                case MATCHED -> ossToDbMatched++;
+                case OSS_ONLY -> ossOnly++;
+                case OSS_TO_DB_MISMATCHED -> ossToDbMismatched++;
+                case DB_TO_OSS_MISSING -> dbToOssMismatched++;
+                case SKIPPED -> skipped++;
+            }
+        }
     }
+
 }

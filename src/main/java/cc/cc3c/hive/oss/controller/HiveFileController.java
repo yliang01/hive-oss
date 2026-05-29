@@ -14,6 +14,8 @@ import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.FileQueryParams;
 import cc.cc3c.hive.oss.service.HiveRecordQueryService;
 import cc.cc3c.hive.oss.service.HiveOssService;
+import cc.cc3c.hive.oss.service.HiveRecordStateService;
+import cc.cc3c.hive.oss.service.HiveRecordStateTransitionException;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.web.CategoryContext;
@@ -41,8 +43,9 @@ public class HiveFileController {
     private final FileGroupRecordRepository fileGroupRecordRepository;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
+    private final HiveRecordStateService stateService;
 
-    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService) {
+    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService, HiveRecordStateService stateService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
         this.hiveRecordQueryService = hiveRecordQueryService;
@@ -51,6 +54,7 @@ public class HiveFileController {
         this.fileGroupRecordRepository = fileGroupRecordRepository;
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
+        this.stateService = stateService;
     }
 
     @GetMapping("/categories/{category}/files:batch-get")
@@ -100,8 +104,8 @@ public class HiveFileController {
     }
 
     @PostMapping("/categories/{category}/files:mark-delete")
-    public ResponseEntity<Void> bulkMarkDelete(CategoryContext category,
-                                               @RequestBody FileBulkMarkDeleteRequest request) {
+    public ResponseEntity<?> bulkMarkDelete(CategoryContext category,
+                                                @RequestBody FileBulkMarkDeleteRequest request) {
         if (request.getFileKeys() == null || request.getFileKeys().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
@@ -114,13 +118,12 @@ public class HiveFileController {
         if (records.size() != normalizedKeys.size()) {
             return ResponseEntity.badRequest().build();
         }
-        boolean hasUndeletable = records.stream().anyMatch(record -> !Boolean.TRUE.equals(record.getDeletable()));
-        if (hasUndeletable) {
-            return ResponseEntity.badRequest().build();
-        }
-        for (HiveRecord record : records) {
-            record.setStatus(HiveRecordStatus.TO_BE_DELETED);
-            record.setDeletable(false);
+        try {
+            for (HiveRecord record : records) {
+                stateService.markDelete(record);
+            }
+        } catch (HiveRecordStateTransitionException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         }
         hiveRecordRepository.saveAll(records);
         return ResponseEntity.ok().build();
@@ -171,10 +174,38 @@ public class HiveFileController {
             }
             fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
             thumbnailAsyncService.deleteCacheFiles(fileKey);
-            record.setCategory(null);
-            record.setDeleted(true);
+            stateService.confirmDeleted(record);
             hiveRecordRepository.save(record);
         }
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/categories/{category}/files:cleanup-local")
+    public ResponseEntity<?> cleanupLocalRecords(CategoryContext category,
+                                                 @RequestBody FileBulkMarkDeleteRequest request) {
+        if (request.getFileKeys() == null || request.getFileKeys().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(request.getFileKeys());
+        if (normalizedKeys.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<HiveRecord> records = hiveRecordRepository
+                .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
+        if (records.size() != normalizedKeys.size()) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            for (HiveRecord record : records) {
+                fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
+                imageMetaRepository.findByHiveRecordId(record.getId()).ifPresent(imageMetaRepository::delete);
+                thumbnailAsyncService.deleteCacheFiles(record.getFileKey());
+                stateService.cleanupLocalRecord(record);
+            }
+        } catch (HiveRecordStateTransitionException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+        hiveRecordRepository.saveAll(records);
         return ResponseEntity.ok().build();
     }
 }

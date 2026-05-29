@@ -10,7 +10,7 @@
 
 ## 行为说明
 
-远程同步将 OSS 对象列表与 DB 中的 `HiveRecord` 进行比对，更新状态（`OSS_ONLY`、`DB_ONLY`、`UPLOADED`）并返回统计 VO。详见 [service-orchestration.md](service-orchestration.md) 中 `HiveSyncService`。
+远程同步将 OSS 对象列表与 DB 中的 `HiveRecord` 进行比对，按状态机更新状态（`OSS_ONLY`、`DB_ONLY`、`UPLOADED`）并返回统计 VO。详见 [hive-record-state-machine.md](hive-record-state-machine.md) 与 [service-orchestration.md](service-orchestration.md) 中 `HiveSyncService`。
 
 ---
 

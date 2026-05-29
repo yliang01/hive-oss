@@ -16,4 +16,5 @@ public class HiveSyncVO {
     private int ossToDbMatched;
     private int ossToDbMismatched;
     private int dbToOssMismatched;
+    private int skipped;
 }

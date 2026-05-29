@@ -150,6 +150,7 @@ public class FileCategoryService {
                 .lastSyncOssToDbMatched(category.getLastSyncOssToDbMatched())
                 .lastSyncOssToDbMismatched(category.getLastSyncOssToDbMismatched())
                 .lastSyncDbToOssMismatched(category.getLastSyncDbToOssMismatched())
+                .lastSyncSkipped(category.getLastSyncSkipped())
                 .lastSyncMessage(category.getLastSyncMessage())
                 .build();
     }
