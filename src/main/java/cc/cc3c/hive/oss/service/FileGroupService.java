@@ -95,7 +95,7 @@ public class FileGroupService {
         FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
         FileGroup group = new FileGroup();
         group.setCategory(category);
-        group.setGroupCode(request.getGroupCode().trim());
+        group.setGroupCode(request.getGroupCode().trim().toUpperCase(Locale.ROOT));
         group.setGroupName(request.getGroupName().trim());
         group.setSortOrder(request.getSortOrder() == null ? 0 : request.getSortOrder());
         group.setCreatedAt(LocalDateTime.now());
