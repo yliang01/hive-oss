@@ -1,16 +1,13 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
-import cc.cc3c.hive.domain.repository.FileGroupRecordRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.FileBulkMarkDeleteRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordsVO;
-import cc.cc3c.hive.oss.service.FileGroupService;
 import cc.cc3c.hive.oss.service.FileQueryParams;
 import cc.cc3c.hive.oss.service.HiveRecordQueryService;
 import cc.cc3c.hive.oss.service.HiveOssService;
@@ -38,20 +35,16 @@ public class HiveFileController {
     private final HiveRecordRepository hiveRecordRepository;
     private final HiveRecordImageMetaRepository imageMetaRepository;
     private final HiveRecordQueryService hiveRecordQueryService;
-    private final FileGroupService fileGroupService;
     private final HiveRecordVOAssembler assembler;
-    private final FileGroupRecordRepository fileGroupRecordRepository;
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
     private final HiveRecordStateService stateService;
 
-    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, FileGroupService fileGroupService, HiveRecordVOAssembler assembler, FileGroupRecordRepository fileGroupRecordRepository, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService, HiveRecordStateService stateService) {
+    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, HiveRecordVOAssembler assembler, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService, HiveRecordStateService stateService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
         this.hiveRecordQueryService = hiveRecordQueryService;
-        this.fileGroupService = fileGroupService;
         this.assembler = assembler;
-        this.fileGroupRecordRepository = fileGroupRecordRepository;
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
         this.stateService = stateService;
@@ -68,7 +61,7 @@ public class HiveFileController {
             return ResponseEntity.badRequest().build();
         }
         List<HiveRecord> records = hiveRecordRepository
-                .findByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
+                .findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
         return ResponseEntity.ok(buildRecordVOs(category, records));
     }
 
@@ -92,13 +85,10 @@ public class HiveFileController {
             return List.of();
         }
         List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
-        Map<Integer, FileGroupRecord> groupRecordMap =
-                fileGroupService.findGroupRecordMapByRecordIds(recordIds);
         Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
                 .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
         return records.stream()
                 .map(record -> assembler.buildHiveRecordVO(record, context,
-                        groupRecordMap.get(record.getId()),
                         Optional.ofNullable(imageMetaMap.get(record.getId()))))
                 .toList();
     }
@@ -172,7 +162,7 @@ public class HiveFileController {
                 log.error("failed to delete {}", hiveOssTask);
                 return ResponseEntity.internalServerError().build();
             }
-            fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
+            record.clearGroup();
             thumbnailAsyncService.deleteCacheFiles(fileKey);
             stateService.confirmDeleted(record);
             hiveRecordRepository.save(record);
@@ -197,7 +187,7 @@ public class HiveFileController {
         }
         try {
             for (HiveRecord record : records) {
-                fileGroupRecordRepository.deleteByHiveRecord_Id(record.getId());
+                record.clearGroup();
                 imageMetaRepository.findByHiveRecordId(record.getId()).ifPresent(imageMetaRepository::delete);
                 thumbnailAsyncService.deleteCacheFiles(record.getFileKey());
                 stateService.cleanupLocalRecord(record);

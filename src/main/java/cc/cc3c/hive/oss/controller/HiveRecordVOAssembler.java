@@ -1,6 +1,5 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.entity.FileGroup;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
@@ -64,7 +63,7 @@ public class HiveRecordVOAssembler {
         this.previewMaxSizeBytes = previewMaxSizeBytes;
     }
 
-    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, FileGroup group, Optional<HiveRecordImageMeta> imageMeta) {
+    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, Optional<HiveRecordImageMeta> imageMeta) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
         boolean restorable = isRestorable(fileContext);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
@@ -87,8 +86,8 @@ public class HiveRecordVOAssembler {
                 .category(context.code())
                 .categoryLabel(context.name())
                 .uiVariant(context.uiVariant())
-                .groupCode(group == null ? null : group.getGroupCode())
-                .groupName(group == null ? null : group.getGroupName())
+                .groupCode(record.getGroup() == null ? null : record.getGroup().getGroupCode())
+                .groupName(record.getGroup() == null ? null : record.getGroup().getGroupName())
                 .fileName(record.getFileName())
                 .fileKey(record.getFileKey())
                 .zipped(record.getZipped())
