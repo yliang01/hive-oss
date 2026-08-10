@@ -1,10 +1,11 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.entity.FileGroupRecord;
+import cc.cc3c.hive.domain.entity.FileGroup;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Subquery;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -41,27 +42,15 @@ public class HiveRecordQueryService {
             }
 
             if (StringUtils.isNotBlank(params.groupCode())) {
-                predicates.add(cb.exists(groupRecordSubquery(root.get("id"), categoryId, params.groupCode(), query.subquery(Long.class), cb)));
+                Join<HiveRecord, FileGroup> group = root.join("group", JoinType.INNER);
+                predicates.add(cb.equal(group.get("category").get("id"), categoryId));
+                predicates.add(cb.equal(cb.lower(group.get("groupCode")), params.groupCode().toLowerCase()));
             } else if (params.ungroupedOnly()) {
-                predicates.add(cb.not(cb.exists(groupRecordSubquery(root.get("id"), categoryId, null, query.subquery(Long.class), cb))));
+                Join<HiveRecord, FileGroup> group = root.join("group", JoinType.LEFT);
+                predicates.add(cb.isNull(group.get("id")));
             }
 
             return cb.and(predicates.toArray(Predicate[]::new));
         };
-    }
-
-    private Subquery<Long> groupRecordSubquery(jakarta.persistence.criteria.Path<Integer> recordId,
-                                               Long categoryId,
-                                               String groupCode,
-                                               Subquery<Long> subquery,
-                                               jakarta.persistence.criteria.CriteriaBuilder cb) {
-        var groupRecord = subquery.from(FileGroupRecord.class);
-        List<Predicate> predicates = new ArrayList<>();
-        predicates.add(cb.equal(groupRecord.get("hiveRecord").get("id"), recordId));
-        predicates.add(cb.equal(groupRecord.get("group").get("category").get("id"), categoryId));
-        if (StringUtils.isNotBlank(groupCode)) {
-            predicates.add(cb.equal(cb.lower(groupRecord.get("group").get("groupCode")), groupCode.toLowerCase()));
-        }
-        return subquery.select(groupRecord.get("id")).where(predicates.toArray(Predicate[]::new));
     }
 }
