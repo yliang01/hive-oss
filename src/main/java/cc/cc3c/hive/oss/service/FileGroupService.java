@@ -2,15 +2,10 @@ package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.FileGroup;
-import cc.cc3c.hive.domain.entity.FileGroupRecord;
 import cc.cc3c.hive.domain.entity.HiveRecord;
-import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.repository.FileCategoryRepository;
-import cc.cc3c.hive.domain.repository.FileGroupRecordRepository;
 import cc.cc3c.hive.domain.repository.FileGroupRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.controller.vo.CategoryUpsertRequest;
-import cc.cc3c.hive.oss.controller.vo.FileCategoryVO;
 import cc.cc3c.hive.oss.controller.vo.FileGroupVO;
 import cc.cc3c.hive.oss.controller.vo.GroupUpsertRequest;
 import cc.cc3c.hive.oss.web.FileKeyNormalizer;
@@ -19,24 +14,19 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Locale;
 
 @Service
 public class FileGroupService {
-    private final FileCategoryRepository fileCategoryRepository;
     private final FileGroupRepository fileGroupRepository;
-    private final FileGroupRecordRepository fileGroupRecordRepository;
     private final HiveRecordRepository hiveRecordRepository;
     private final FileCategoryService fileCategoryService;
 
-    public FileGroupService(FileCategoryRepository fileCategoryRepository,
-                            FileGroupRepository fileGroupRepository,
-                            FileGroupRecordRepository fileGroupRecordRepository,
-                            HiveRecordRepository hiveRecordRepository,
-                            FileCategoryService fileCategoryService) {
-        this.fileCategoryRepository = fileCategoryRepository;
+    public FileGroupService(FileGroupRepository fileGroupRepository,
+                             HiveRecordRepository hiveRecordRepository,
+                             FileCategoryService fileCategoryService) {
         this.fileGroupRepository = fileGroupRepository;
-        this.fileGroupRecordRepository = fileGroupRecordRepository;
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryService = fileCategoryService;
     }
@@ -44,14 +34,6 @@ public class FileGroupService {
     public List<FileGroupVO> listGroups(String categoryCode) {
         return fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode)
                 .stream().map(this::toGroupVO).toList();
-    }
-
-    public Map<Integer, FileGroupRecord> findGroupRecordMapByRecordIds(Collection<Integer> recordIds) {
-        if (recordIds == null || recordIds.isEmpty()) {
-            return Map.of();
-        }
-        return fileGroupRecordRepository.findByHiveRecord_IdIn(recordIds).stream()
-                .collect(HashMap::new, (map, item) -> map.put(item.getHiveRecord().getId(), item), HashMap::putAll);
     }
 
     @Transactional
@@ -69,19 +51,8 @@ public class FileGroupService {
         if (records.isEmpty()) {
             return;
         }
-        List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
-        fileGroupRecordRepository.deleteByHiveRecord_IdIn(recordIds);
-        String assignedBy = StringUtils.defaultIfBlank(operator, "system");
-        LocalDateTime assignedAt = LocalDateTime.now();
-        List<FileGroupRecord> links = records.stream().map(record -> {
-            FileGroupRecord link = new FileGroupRecord();
-            link.setGroup(group);
-            link.setHiveRecord(record);
-            link.setAssignedBy(assignedBy);
-            link.setAssignedAt(assignedAt);
-            return link;
-        }).toList();
-        fileGroupRecordRepository.saveAll(links);
+        records.forEach(record -> record.assignTo(group));
+        hiveRecordRepository.saveAll(records);
     }
 
     @Transactional
@@ -123,7 +94,10 @@ public class FileGroupService {
     public void deleteGroup(String groupCode, String categoryCode) {
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
-        fileGroupRecordRepository.deleteByGroup_Id(group.getId());
+        List<HiveRecord> records = hiveRecordRepository.findByGroup_Id(group.getId());
+        records.forEach(HiveRecord::clearGroup);
+        hiveRecordRepository.saveAll(records);
+        hiveRecordRepository.flush();
         fileGroupRepository.delete(group);
     }
 
