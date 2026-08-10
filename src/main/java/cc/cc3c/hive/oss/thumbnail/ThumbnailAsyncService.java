@@ -77,16 +77,32 @@ public class ThumbnailAsyncService {
      * by HiveUploadService, so no copy is needed. Returns immediately after submitting.
      */
     public void submitAsync(HiveRecord hiveRecord, String fileKey) {
-        File stagingFile = cacheFileFor(fileKey);
+        submitAsync(hiveRecord, fileKey, cacheFileFor(fileKey));
+    }
 
+    public void refreshAsync(HiveRecord hiveRecord, String fileKey, File sourceFile) throws IOException {
+        File stagingFile = cacheFileFor(fileKey);
+        if (!sourceFile.getCanonicalFile().equals(stagingFile.getCanonicalFile())) {
+            FileUtils.copyFile(sourceFile, stagingFile);
+        }
+        submitAsync(hiveRecord, fileKey, stagingFile);
+    }
+
+    private void submitAsync(HiveRecord hiveRecord, String fileKey, File stagingFile) {
         LocalDateTime now = LocalDateTime.now();
-        HiveRecordImageMeta meta = HiveRecordImageMeta.builder()
-                .hiveRecordId(hiveRecord.getId())
-                .thumbStatus("PENDING")
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
+        HiveRecordImageMeta meta = imageMetaRepository.findByHiveRecordId(hiveRecord.getId()).orElseGet(() -> {
+            HiveRecordImageMeta created = new HiveRecordImageMeta();
+            created.setHiveRecordId(hiveRecord.getId());
+            created.setCreatedAt(now);
+            return created;
+        });
+        meta.setThumbKey(null);
+        meta.setThumbStatus("PENDING");
+        meta.setImageWidth(null);
+        meta.setImageHeight(null);
+        meta.setUpdatedAt(now);
         imageMetaRepository.save(meta);
+        FileUtils.deleteQuietly(thumbnailCacheFileFor(fileKey));
 
         Thread.ofVirtual().start(() -> doGenerateAndUpload(hiveRecord, fileKey, stagingFile, meta));
     }

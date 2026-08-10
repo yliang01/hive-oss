@@ -152,6 +152,13 @@ public class HiveRecordStateService {
         record.setDeletable(storageClass != CategoryStorageClass.ARCHIVE);
     }
 
+    public void refreshReuploaded(HiveRecord record, FileCategoryEntity category, HiveOssObject object,
+                                  CategoryStorageClass storageClass) {
+        record.setStatus(HiveRecordStatus.UPLOADED);
+        refreshRemoteMetadata(record, category, object);
+        record.setDeletable(storageClass != CategoryStorageClass.ARCHIVE);
+    }
+
     public void markUploadFailed(HiveRecord record) {
         transition(record, Event.UPLOAD_FAILED);
         record.setDeletable(false);

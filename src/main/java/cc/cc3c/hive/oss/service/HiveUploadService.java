@@ -79,10 +79,16 @@ public class HiveUploadService {
         }
         try {
             boolean thumbnail = thumbnailAsyncService.isThumbnailEligible(uiVariant, fileName);
+            long originalSize;
             if (thumbnail) {
-                doBufferedUpload(hiveRecord, fileKey, fileName, resolved, true, inputStream);
+                originalSize = doBufferedUpload(hiveRecord, fileKey, fileName, resolved, inputStream);
             } else {
-                doStreamUpload(hiveRecord, fileKey, fileName, resolved, inputStream);
+                originalSize = doStreamUpload(hiveRecord, fileKey, fileName, resolved, inputStream);
+            }
+            hiveRecord.setOriginalSize(originalSize);
+            refreshUploadedRecord(hiveRecord, resolved);
+            if (thumbnail) {
+                thumbnailAsyncService.submitAsync(hiveRecord, fileKey);
             }
             return fileKey;
         } catch (Exception e) {
@@ -100,9 +106,8 @@ public class HiveUploadService {
         return HiveRecordStatus.FAILED.equals(existing.get().getStatus());
     }
 
-    private void doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
-                                  CategoryStorageClass storageClass, boolean generateThumbnail,
-                                  InputStream inputStream) throws Exception {
+    private long doBufferedUpload(HiveRecord hiveRecord, String fileKey, String fileName,
+                                  CategoryStorageClass storageClass, InputStream inputStream) throws Exception {
         File cacheFile = new File(imageCacheDir, fileKey + "_src");
         try {
             try (InputStream in = inputStream; FileOutputStream out = new FileOutputStream(cacheFile)) {
@@ -117,26 +122,24 @@ public class HiveUploadService {
                         .withEncryption(fileName);
                 hiveOssService.using(hiveRecord.getProvider()).uploadSync(task);
             }
-            refreshUploadedRecord(hiveRecord, storageClass);
-            if (generateThumbnail) {
-                thumbnailAsyncService.submitAsync(hiveRecord, fileKey);
-            }
+            return cacheFile.length();
         } catch (Exception e) {
             FileUtils.deleteQuietly(cacheFile);
             throw e;
         }
     }
 
-    private void doStreamUpload(HiveRecord hiveRecord, String fileKey, String fileName,
+    private long doStreamUpload(HiveRecord hiveRecord, String fileKey, String fileName,
                                 CategoryStorageClass storageClass, InputStream inputStream) throws Exception {
+        CountingInputStream countingInput = new CountingInputStream(inputStream);
         HiveOssTask task = HiveOssTask.createTask()
                 .withBucket(hiveRecord.getCategory().getBucketName())
                 .withKey(fileKey)
-                .withInputStream(inputStream)
+                .withInputStream(countingInput)
                 .withStorageClass(storageClass.name())
                 .withEncryption(fileName);
         hiveOssService.using(hiveRecord.getProvider()).uploadStreaming(task);
-        refreshUploadedRecord(hiveRecord, storageClass);
+        return countingInput.getCount();
     }
 
     private void refreshUploadedRecord(HiveRecord hiveRecord, CategoryStorageClass storageClass) {
@@ -174,5 +177,35 @@ public class HiveUploadService {
 
     private CategoryStorageClass resolveStorageClass(CategoryStorageClass storageClass) {
         return storageClass == null ? CategoryStorageClass.STANDARD : storageClass;
+    }
+
+    private static class CountingInputStream extends FilterInputStream {
+        private long count;
+
+        private CountingInputStream(InputStream inputStream) {
+            super(inputStream);
+        }
+
+        @Override
+        public int read() throws IOException {
+            int value = super.read();
+            if (value >= 0) {
+                count++;
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = super.read(buffer, offset, length);
+            if (read > 0) {
+                count += read;
+            }
+            return read;
+        }
+
+        private long getCount() {
+            return count;
+        }
     }
 }
