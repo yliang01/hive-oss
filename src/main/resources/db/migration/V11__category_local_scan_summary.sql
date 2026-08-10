@@ -1,0 +1,9 @@
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_time TIMESTAMP;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_status VARCHAR(32);
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_local_total INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_matched INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_size_mismatched INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_local_only INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_db_only INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_skipped INT;
+ALTER TABLE file_category ADD COLUMN IF NOT EXISTS last_local_scan_message VARCHAR(512);
