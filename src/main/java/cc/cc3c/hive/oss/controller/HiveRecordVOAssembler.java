@@ -1,6 +1,6 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.domain.entity.FileGroupRecord;
+import cc.cc3c.hive.domain.entity.FileGroup;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
@@ -64,7 +64,7 @@ public class HiveRecordVOAssembler {
         this.previewMaxSizeBytes = previewMaxSizeBytes;
     }
 
-    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, FileGroupRecord groupRecord, Optional<HiveRecordImageMeta> imageMeta) {
+    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, FileGroup group, Optional<HiveRecordImageMeta> imageMeta) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
         boolean restorable = isRestorable(fileContext);
         boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
@@ -87,12 +87,13 @@ public class HiveRecordVOAssembler {
                 .category(context.code())
                 .categoryLabel(context.name())
                 .uiVariant(context.uiVariant())
-                .groupCode(groupRecord == null ? null : groupRecord.getGroup().getGroupCode())
-                .groupName(groupRecord == null ? null : groupRecord.getGroup().getGroupName())
+                .groupCode(group == null ? null : group.getGroupCode())
+                .groupName(group == null ? null : group.getGroupName())
                 .fileName(record.getFileName())
                 .fileKey(record.getFileKey())
                 .zipped(record.getZipped())
                 .size(record.getSize())
+                .originalSize(record.getOriginalSize())
                 .storageClass(context.storageClass().name())
                 .status(record.getStatus().name())
                 .updateTime(record.getUpdateTime())
@@ -104,6 +105,10 @@ public class HiveRecordVOAssembler {
                 .downloadProgress(downloadTask == null ? null : downloadTask.getProgress())
                 .localPath(localPath)
                 .localPathExists(localPathExists)
+                .localCheckStatus(HiveRecordStatus.UPLOADED.equals(record.getStatus()) && record.getLocalCheckStatus() != null
+                        ? record.getLocalCheckStatus().name() : null)
+                .localCheckTime(HiveRecordStatus.UPLOADED.equals(record.getStatus()) ? record.getLocalCheckTime() : null)
+                .localCheckObservedSize(HiveRecordStatus.UPLOADED.equals(record.getStatus()) ? record.getLocalCheckObservedSize() : null)
                 .deletable(record.getDeletable())
                 .previewable(previewDecision.previewable())
                 .previewUrl(previewUrl)
