@@ -17,6 +17,7 @@ public class HiveRecordVO {
     private String fileKey;
     private Boolean zipped;
     private Long size;
+    private Long originalSize;
     private String storageClass;
     private String status;
     private LocalDateTime updateTime;
@@ -28,6 +29,9 @@ public class HiveRecordVO {
     private Integer downloadProgress;
     private String localPath;
     private Boolean localPathExists;
+    private String localCheckStatus;
+    private LocalDateTime localCheckTime;
+    private Long localCheckObservedSize;
     private Boolean deletable;
     private Boolean previewable;
     private String previewUrl;
