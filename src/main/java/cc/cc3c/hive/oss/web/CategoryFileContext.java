@@ -13,6 +13,7 @@ public record CategoryFileContext(
         String key,
         Integer recordId,
         String fileName,
+        String groupCode,
         Boolean zipped,
         HiveStorageProvider provider,
         Long size,
@@ -22,7 +23,8 @@ public record CategoryFileContext(
         HiveDownloadStatus downloadStatus
 ) {
     public static CategoryFileContext from(CategoryContext category, HiveRecord record) {
-        return new CategoryFileContext(category, record.getFileKey(), record.getId(), record.getFileName(), record.getZipped(),
+        String groupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
+        return new CategoryFileContext(category, record.getFileKey(), record.getId(), record.getFileName(), groupCode, record.getZipped(),
                 record.getProvider(), record.getSize(), record.getStatus(), record.getRestoreTime(),
                 record.getRestoreStatus(), record.getDownloadStatus());
     }

@@ -16,7 +16,7 @@
 | `files.js` | `GET /categories/{category}/files/search` | fetch | `HiveOssController#searchFiles` | 保留 |
 | Vue `files.ts` | `GET /categories/{category}/files:batch-get?fileKeys=...` | axios | `HiveFileController#batchGetFiles` | 保留；操作后批量刷新记录状态 |
 | `files.js` | `POST /categories/{category}/files/download-task/{fileKey}` | fetch | `HiveOssController#downloadTask` | 保留 |
-| `files.js` | `GET /categories/{category}/files/download-task-status/{fileKey}` | fetch | `HiveOssController#downloadTaskStatus` | 保留，需补齐 `downloadUrl` |
+| `files.js` | `GET /categories/{category}/files/download-task-status/{fileKey}` | fetch | `HiveOssController#downloadTaskStatus` | 保留；仅返回任务状态和进度 |
 | `files.js` | `POST /categories/{category}/groups/{groupId}/files:assign` | fetch | `HiveOssController#assignFilesToGroup` | 保留（主接口） |
 | `files.js` | `POST /categories/{category}/groups/{groupId}/files:move` | fetch | `HiveOssController#moveFilesToGroup` | 冗余，前端改为调用 `assign` |
 | Vue `files.ts` | `POST /categories/{category}/files:mark-delete` | axios | `HiveFileController#bulkMarkDelete` | 保留；文件删除统一走选中后批量标记 |
@@ -66,17 +66,21 @@
   - 前端不是通过 `fetch` 调用，而是通过 `previewUrl` 赋值给 `img/iframe src` 间接触发。
   - 结论：保留。
 
-## 契约修复项
+## 下载任务契约
 
 - 下载状态接口 `GET /categories/{category}/files/download-task-status/{fileKey}`：
-  - 前端会读取 `downloadUrl` 自动触发下载；
-  - 后端 VO 目前缺少该字段。
-  - 处理策略：后端返回 `downloadUrl`（成功状态且本地文件存在时提供）。
+  - 返回任务状态和进度；
+  - 不返回下载目录物理路径或文件存在状态；
+  - 前端不再自动打开 `file://` URL。
+- 文件列表接口中的 `localFileAvailable`：
+  - 后端按下载目录实时计算；
+  - 仅控制下载与释放操作，不包含物理路径。
 
 ## 本轮执行结果
 
 - 已完成：前后端 API 映射矩阵输出。
-- 已完成：下载状态接口补齐 `downloadUrl` 契约字段。
+- 已完成：移除下载状态接口中的物理路径字段，保留任务状态和进度。
+- 已完成：按文件系统状态控制本地副本释放和再次下载。
 - 已完成：前端批量操作统一到 `files:assign`。
 - 已完成：`files:move` 标记 deprecated 并纳入废弃窗口。
 

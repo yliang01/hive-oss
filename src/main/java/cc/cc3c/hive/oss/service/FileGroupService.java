@@ -16,19 +16,23 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 @Service
 public class FileGroupService {
     private final FileGroupRepository fileGroupRepository;
     private final HiveRecordRepository hiveRecordRepository;
     private final FileCategoryService fileCategoryService;
+    private final HiveDownloadService hiveDownloadService;
 
     public FileGroupService(FileGroupRepository fileGroupRepository,
                              HiveRecordRepository hiveRecordRepository,
-                             FileCategoryService fileCategoryService) {
+                             FileCategoryService fileCategoryService,
+                             HiveDownloadService hiveDownloadService) {
         this.fileGroupRepository = fileGroupRepository;
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryService = fileCategoryService;
+        this.hiveDownloadService = hiveDownloadService;
     }
 
     public List<FileGroupVO> listGroups(String categoryCode) {
@@ -47,10 +51,14 @@ public class FileGroupService {
         if (normalizedKeys.isEmpty()) {
             return;
         }
-        List<HiveRecord> records = hiveRecordRepository.findByCategory_IdAndFileKeyInAndDeletedIsFalse(categoryId, normalizedKeys);
+        List<HiveRecord> records = hiveRecordRepository.findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(categoryId, normalizedKeys);
         if (records.isEmpty()) {
             return;
         }
+        List<HiveRecord> changedRecords = records.stream()
+                .filter(record -> record.getGroup() == null || !Objects.equals(record.getGroup().getId(), group.getId()))
+                .toList();
+        ensureGroupCanChange(categoryCode, changedRecords, "存在本地副本或下载中的文件，无法调整分组");
         records.forEach(record -> record.assignTo(group));
         hiveRecordRepository.saveAll(records);
     }
@@ -95,6 +103,7 @@ public class FileGroupService {
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
         List<HiveRecord> records = hiveRecordRepository.findByGroup_Id(group.getId());
+        ensureGroupCanChange(categoryCode, records, "分组中存在本地副本或下载中的文件，无法删除分组");
         records.forEach(HiveRecord::clearGroup);
         hiveRecordRepository.saveAll(records);
         hiveRecordRepository.flush();
@@ -108,5 +117,11 @@ public class FileGroupService {
                 .groupName(group.getGroupName())
                 .sortOrder(group.getSortOrder())
                 .build();
+    }
+
+    private void ensureGroupCanChange(String categoryCode, List<HiveRecord> records, String message) {
+        if (records.stream().anyMatch(record -> hiveDownloadService.hasLocalDownloadOrIsDownloading(categoryCode, record))) {
+            throw new LocalDownloadGroupConflictException(message);
+        }
     }
 }

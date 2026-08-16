@@ -8,9 +8,6 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class HiveRecordVO {
-    private String category;
-    private String categoryLabel;
-    private String uiVariant;
     private String groupCode;
     private String groupName;
     private String fileName;
@@ -18,7 +15,6 @@ public class HiveRecordVO {
     private Boolean zipped;
     private Long size;
     private Long originalSize;
-    private String storageClass;
     private String status;
     private LocalDateTime updateTime;
     private LocalDateTime unfreezeTime;
@@ -27,8 +23,7 @@ public class HiveRecordVO {
     private Boolean downloadable;
     private String downloadStatus;
     private Integer downloadProgress;
-    private String localPath;
-    private Boolean localPathExists;
+    private Boolean localFileAvailable;
     private String localCheckStatus;
     private LocalDateTime localCheckTime;
     private Long localCheckObservedSize;

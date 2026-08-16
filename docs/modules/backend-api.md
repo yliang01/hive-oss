@@ -43,7 +43,11 @@
 
 `/categories/{category}/files/search` 兼容期建议保留 2 个发布周期，期间通过响应头 `X-API-Deprecated` 提示调用方迁移到 `/categories/{category}/files?keyword=...`。
 
-`/categories/{category}/files/download-task-status/{fileKey}` 成功态会返回 `downloadUrl`，用于前端自动触发本地下载。
+`/categories/{category}/files/download-task-status/{fileKey}` 返回下载任务状态与进度；成功态不返回下载目录物理路径或文件存在状态。文件列表中的 `localFileAvailable` 由后端按文件系统实时计算，仅用于控制下载和释放操作。
+
+创建下载任务时若目标本地副本已存在，或下载进行中时请求释放本地副本，接口返回 `409 Conflict`。
+
+下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在本地副本或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
 
 ## 关键配置项
 

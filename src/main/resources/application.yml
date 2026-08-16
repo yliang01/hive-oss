@@ -19,7 +19,7 @@ spring:
 #    show-sql: true
 
 hive:
-  downloadDir: ./data/download
+  downloadDir: C:/Users/YLiang/Desktop/hive uploaded
   localScanDir: C:/Users/YLiang/Desktop/hive uploaded
   imageCacheDir: ./data/image-cache
   imageCacheTtlDays: 7

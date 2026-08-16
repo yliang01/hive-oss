@@ -20,12 +20,14 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
 public class HiveDownloadService {
+    private static final String UNGROUPED_DIR = "_ungrouped";
 
     private final HiveOssService hiveOssService;
     private final HiveRecordRepository hiveRecordRepository;
@@ -75,10 +77,23 @@ public class HiveDownloadService {
         return downloadTasks.get(taskMapKey(file));
     }
 
+    public boolean isDownloadFileAvailable(CategoryFileContext context) {
+        return Files.isRegularFile(getDownloadFile(context).toPath(), LinkOption.NOFOLLOW_LINKS);
+    }
+
+    public boolean hasLocalDownloadOrIsDownloading(String categoryCode, HiveRecord record) {
+        if (HiveDownloadStatus.downloading == record.getDownloadStatus()) {
+            return true;
+        }
+        String groupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
+        return Files.isRegularFile(getDownloadFile(categoryCode, groupCode, record.getZipped(), record.getFileName()).toPath(),
+                LinkOption.NOFOLLOW_LINKS);
+    }
+
     public HiveDownloadStatus reconcileStaleDownloading(CategoryFileContext context) {
         if (HiveDownloadStatus.downloading == context.downloadStatus()
                 && !downloadTasks.containsKey(taskMapKey(context))) {
-            FileUtils.deleteQuietly(getDownloadPartFile(context.zipped(), context.fileName()));
+            FileUtils.deleteQuietly(getDownloadPartFile(context));
             hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), HiveDownloadStatus.failed);
             return HiveDownloadStatus.failed;
         }
@@ -89,8 +104,9 @@ public class HiveDownloadService {
         if (HiveDownloadStatus.downloading == context.downloadStatus()) {
             return;
         }
-        File targetFile = getDownloadFile(context.zipped(), context.fileName());
-        File partFile = getDownloadPartFile(context.zipped(), context.fileName());
+        File targetFile = getDownloadFile(context);
+        File partFile = getDownloadPartFile(context);
+        FileUtils.forceMkdir(targetFile.getParentFile());
         FileUtils.deleteQuietly(partFile);
         HiveOssTask task = createOutputTask(context, new FileOutputStream(partFile));
         log.info("download start {}", task);
@@ -171,13 +187,14 @@ public class HiveDownloadService {
         }
     }
 
-    public void releaseLocalStatus(CategoryFileContext context) {
-        hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), null);
-        File downloadFile = getDownloadFile(context.zipped(), context.fileName());
-        boolean deleted = FileUtils.deleteQuietly(downloadFile);
-        if (!deleted) {
-            log.error("failed to delete file {}", downloadFile);
+    public void releaseLocalStatus(CategoryFileContext context) throws IOException {
+        File downloadFile = getDownloadFile(context);
+        if (Files.exists(downloadFile.toPath(), LinkOption.NOFOLLOW_LINKS)
+                && !Files.isRegularFile(downloadFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("local download target is not a regular file: " + downloadFile);
         }
+        Files.deleteIfExists(downloadFile.toPath());
+        hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), null);
     }
 
     private HiveOssTask createOutputTask(CategoryFileContext file, OutputStream outputStream) throws Exception {
@@ -199,11 +216,17 @@ public class HiveDownloadService {
         return file.category().categoryId() + ":" + file.key();
     }
 
-    public File getDownloadFile(Boolean zipped, String fileName) {
-        return new File(downloadFolder, Boolean.TRUE.equals(zipped) ? fileName + ".zip" : fileName);
+    public File getDownloadFile(CategoryFileContext context) {
+        return getDownloadFile(context.category().code(), context.groupCode(), context.zipped(), context.fileName());
     }
 
-    private File getDownloadPartFile(Boolean zipped, String fileName) {
-        return new File(getDownloadFile(zipped, fileName).getAbsolutePath() + ".part");
+    private File getDownloadFile(String categoryCode, String groupCode, Boolean zipped, String fileName) {
+        File categoryDirectory = new File(downloadFolder, categoryCode);
+        File groupDirectory = new File(categoryDirectory, StringUtils.defaultIfBlank(groupCode, UNGROUPED_DIR));
+        return new File(groupDirectory, Boolean.TRUE.equals(zipped) ? fileName + ".zip" : fileName);
+    }
+
+    private File getDownloadPartFile(CategoryFileContext context) {
+        return new File(getDownloadFile(context).getAbsolutePath() + ".part");
     }
 }

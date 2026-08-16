@@ -25,12 +25,12 @@
 |----|------|
 | `HiveOssService` | 按 `HiveStorageProvider` 返回对应 `HiveOss` Bean（如 `alibabaOss`、`tencentOss`），供上传/下载/同步/删除使用 |
 | `HiveUploadService` | 同步上传 `uploadSync` 与流式上传 `uploadStreaming`（bucket 由 category 决定）；写库并可选生成缩略图 |
-| `HiveDownloadService` | 本地下载目录初始化；创建下载任务并异步执行，更新 `HiveRecord` 的下载状态；提供本地文件路径与任务进度查询 |
+| `HiveDownloadService` | 本地下载目录初始化；按分类和分组落盘并异步执行下载，更新 `HiveRecord` 的下载状态；按文件系统判断本地副本、提供任务进度查询与本地副本释放 |
 | `HiveSyncService` | 按 category 解析 bucket 后拉取 OSS 对象列表，与 DB 中的 `HiveRecord` 比对，更新状态（如 OSS_ONLY、DB_ONLY、匹配数等）并返回统计 VO |
 
 ## 关键配置项
 
-- `hive.downloadDir`：下载文件落盘目录。
+- `hive.downloadDir`：下载文件落盘根目录，内部按 `{categoryCode}/{groupCode 或 _ungrouped}` 分目录。
 
 ## 相关文件
 

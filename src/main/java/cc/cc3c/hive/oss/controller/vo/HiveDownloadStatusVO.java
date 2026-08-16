@@ -9,5 +9,4 @@ import lombok.Data;
 public class HiveDownloadStatusVO {
     private HiveDownloadStatus status;
     private int progress;
-    private String downloadUrl;
 }

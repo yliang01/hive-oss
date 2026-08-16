@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
@@ -66,26 +65,19 @@ public class HiveRecordVOAssembler {
     public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, Optional<HiveRecordImageMeta> imageMeta) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
         boolean restorable = isRestorable(fileContext);
-        boolean downloadable = !restorable && (record.getDownloadStatus() == null || record.getDownloadStatus() == HiveDownloadStatus.failed);
+        boolean localFileAvailable = hiveDownloadService.isDownloadFileAvailable(fileContext);
+        boolean downloadable = !restorable
+                && record.getDownloadStatus() != HiveDownloadStatus.downloading
+                && !localFileAvailable;
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
                 ? hiveDownloadService.getDownLoadTask(record) : null;
         PreviewDecision previewDecision = evaluatePreview(fileContext);
-        File downloadFile = hiveDownloadService.getDownloadFile(record.getZipped(), record.getFileName());
-        String localPath = record.getDownloadStatus() != null && record.getDownloadStatus() == HiveDownloadStatus.success
-                ? downloadFile.toURI().toString().replaceFirst("^file:/", "file:///") : null;
-        Boolean localPathExists = null;
-        if (StringUtils.isNotEmpty(localPath)) {
-            localPathExists = downloadFile.exists();
-        }
         String previewUrl = previewDecision.previewable()
                 ? "/categories/" + context.code() + "/files/preview/" + record.getFileKey() : null;
         boolean thumbReady = imageMeta.map(m -> "READY".equals(m.getThumbStatus()) && StringUtils.isNotBlank(m.getThumbKey())).orElse(false);
         String thumbnailUrl = thumbReady
                 ? "/categories/" + context.code() + "/files/preview/thumbnail/" + record.getFileKey() : null;
         return HiveRecordVO.builder()
-                .category(context.code())
-                .categoryLabel(context.name())
-                .uiVariant(context.uiVariant())
                 .groupCode(record.getGroup() == null ? null : record.getGroup().getGroupCode())
                 .groupName(record.getGroup() == null ? null : record.getGroup().getGroupName())
                 .fileName(record.getFileName())
@@ -93,7 +85,6 @@ public class HiveRecordVOAssembler {
                 .zipped(record.getZipped())
                 .size(record.getSize())
                 .originalSize(record.getOriginalSize())
-                .storageClass(context.storageClass().name())
                 .status(record.getStatus().name())
                 .updateTime(record.getUpdateTime())
                 .unfreezeTime(record.getRestoreTime())
@@ -102,8 +93,7 @@ public class HiveRecordVOAssembler {
                 .downloadable(downloadable)
                 .downloadStatus(record.getDownloadStatus() == null ? null : record.getDownloadStatus().name())
                 .downloadProgress(downloadTask == null ? null : downloadTask.getProgress())
-                .localPath(localPath)
-                .localPathExists(localPathExists)
+                .localFileAvailable(localFileAvailable)
                 .localCheckStatus(HiveRecordStatus.UPLOADED.equals(record.getStatus()) && record.getLocalCheckStatus() != null
                         ? record.getLocalCheckStatus().name() : null)
                 .localCheckTime(HiveRecordStatus.UPLOADED.equals(record.getStatus()) ? record.getLocalCheckTime() : null)
