@@ -41,6 +41,8 @@
 
 路径中的 `category` 映射到 `file_category.code`，再由 category 的 `bucket_name` 决定具体 OSS bucket。
 
+解冻接口仅适用于 `storageClass=ARCHIVE` 的分类。前端仅在归档分类展示解冻时间和解冻按钮；`restorable` 决定按钮是否可发起，`unfreezeStatus=IN_PROGRESS` 用于刷新后的轮询恢复。
+
 `/categories/{category}/files/search` 兼容期建议保留 2 个发布周期，期间通过响应头 `X-API-Deprecated` 提示调用方迁移到 `/categories/{category}/files?keyword=...`。
 
 `/categories/{category}/files/download-task-status/{fileKey}` 返回下载任务状态与进度；成功态不返回下载目录物理路径或文件存在状态。文件列表中的 `localFileAvailable` 由后端按文件系统实时计算，仅用于控制下载和释放操作。
