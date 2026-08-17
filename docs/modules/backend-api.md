@@ -6,8 +6,8 @@
 
 ## 启动 / 触发入口
 
-- **HTTP 入口**：`cc.cc3c.hive.oss.controller.HiveOssController`（`@RestController`）
-- 随 Spring Boot 应用启动加载；无独立 main，通过 `HiveOssApplication` 启动后由 DispatcherServlet 路由到本 Controller。
+- **HTTP 入口**：`HiveFileController`、`HiveFileArchiveController`、`HiveFileDownloadController` 等 `@RestController`。
+- 随 Spring Boot 应用启动加载；无独立 main，通过 `HiveOssApplication` 启动后由 DispatcherServlet 路由到各 Controller。
 
 ## 关键依赖
 
@@ -24,10 +24,9 @@
 | 能力 | 方法 | 路径（示例） |
 |------|------|----------------|
 | 分类列表 | GET | `/categories` |
-| 文件列表（含搜索） | GET | `/categories/{category}/files`（支持可选 `keyword`） |
-| 文件搜索（兼容别名，Deprecated） | GET | `/categories/{category}/files/search` |
-| 单文件信息 | GET | `/categories/{category}/files/{fileKey}` |
-| 删除文件 | DELETE | `/categories/{category}/files/{fileKey}` |
+| 文件列表（含搜索/分组筛选） | GET | `/categories/{category}/files` |
+| 批量获取文件详情 | GET | `/categories/{category}/files:batch-get?fileKeys=...` |
+| 标记删除文件 | POST | `/categories/{category}/files:mark-delete` |
 | 解冻 | POST | `/categories/{category}/files/unfreeze/{fileKey}` |
 | 解冻状态 | GET | `/categories/{category}/files/unfreeze-status/{fileKey}` |
 | 创建下载任务 | POST | `/categories/{category}/files/download-task/{fileKey}` |
@@ -41,13 +40,19 @@
 
 路径中的 `category` 映射到 `file_category.code`，再由 category 的 `bucket_name` 决定具体 OSS bucket。
 
-解冻接口仅适用于 `storageClass=ARCHIVE` 的分类。前端仅在归档分类展示解冻时间和解冻按钮；`restorable` 决定按钮是否可发起，`unfreezeStatus=IN_PROGRESS` 用于刷新后的轮询恢复。
+## 解冻与下载契约
+
+解冻只适用于 `storageClass=ARCHIVE`，其他分类的解冻与状态查询返回 `400 Bad Request`。`restorable` 表示归档对象是否仍被冻结：当 `unfreezeTime` 为空或已过期时为 `true`。前端仅在归档分类显示解冻操作，`unfreezeStatus=IN_PROGRESS` 用于页面刷新后恢复轮询。
+
+`POST /files/unfreeze/{fileKey}` 和 `GET /files/unfreeze-status/{fileKey}` 都先向 OSS 查询恢复状态：`NOT_STARTED` 表示尚未申请，`IN_PROGRESS` 返回 `202 Accepted`，`COMPLETED` 返回 `200 OK` 并记录 OSS 给出的有效截止时间。发起解冻时服务端写入 `IN_PROGRESS`；完成时写入 `COMPLETED` 和 `unfreezeTime`。只有有效期内的归档对象可以下载。
 
 `/categories/{category}/files/search` 兼容期建议保留 2 个发布周期，期间通过响应头 `X-API-Deprecated` 提示调用方迁移到 `/categories/{category}/files?keyword=...`。
 
 `/categories/{category}/files/download-task-status/{fileKey}` 返回下载任务状态与进度；成功态不返回下载目录物理路径或文件存在状态。文件列表中的 `localFileAvailable` 由后端按文件系统实时计算，仅用于控制下载和释放操作。
 
-创建下载任务时若目标本地副本已存在，或下载进行中时请求释放本地副本，接口返回 `409 Conflict`。
+创建下载任务的资格由 `HiveDownloadService` 统一判断，文件列表的 `downloadable` 使用同一规则：记录必须为 `UPLOADED`、非冻结归档、非 `downloading`，且目标本地副本不存在。冻结归档返回 `423 Locked`；其他不满足条件的请求返回 `409 Conflict`，响应体为 `{ "error": "..." }`。因此直接调用 API 不能绕过 UI 按钮限制。
+
+创建任务前会修正过期的 `downloading` 状态：若内存任务已不存在，服务端删除遗留 `.part` 文件、将 DB 状态更新为 `failed`，并在当前请求继续创建新任务。任务启动后状态为 `downloading`，成功落盘后为 `success`，失败后为 `failed`。释放本地文件只删除常规文件并清空下载状态；下载中释放仍返回 `409 Conflict`。
 
 下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在下载副本、本地源文件或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
 
@@ -59,7 +64,9 @@
 
 ## 相关文件
 
-- `src/main/java/cc/cc3c/hive/oss/controller/HiveOssController.java`
+- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileController.java`
+- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileArchiveController.java`
+- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileDownloadController.java`
 - `src/main/java/cc/cc3c/hive/oss/controller/vo/*.java`
 - `src/main/java/cc/cc3c/hive/oss/config/HiveOssWebConfig.java`（CORS 等 Web 配置）
 

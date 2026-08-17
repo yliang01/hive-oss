@@ -25,7 +25,7 @@
 |----|------|
 | `HiveOssService` | 按 `HiveStorageProvider` 返回对应 `HiveOss` Bean（如 `alibabaOss`、`tencentOss`），供上传/下载/同步/删除使用 |
 | `HiveUploadService` | 同步上传 `uploadSync` 与流式上传 `uploadStreaming`（bucket 由 category 决定）；写库并可选生成缩略图 |
-| `HiveDownloadService` | 本地下载目录初始化；按分类和分组落盘并异步执行下载，更新 `HiveRecord` 的下载状态；按文件系统判断本地副本、提供任务进度查询与本地副本释放 |
+| `HiveDownloadService` | 本地下载目录初始化；集中判断下载资格（`UPLOADED`、已解冻、非下载中、无副本）；按分类和分组落盘并异步执行下载，更新 `HiveRecord` 的下载状态；按文件系统判断本地副本、提供任务进度查询与本地副本释放 |
 | `HiveLocalCheckService` | 在文件列表、批量刷新和重新上传前即时检查本地源文件；检查结果不写入数据库 |
 | `HiveSyncService` | 按 category 解析 bucket 后拉取 OSS 对象列表，与 DB 中的 `HiveRecord` 比对，更新状态（如 OSS_ONLY、DB_ONLY、匹配数等）并返回统计 VO |
 
@@ -33,6 +33,12 @@
 
 - `hive.downloadDir`：下载文件落盘根目录，内部按 `{categoryCode}/{groupCode 或 _ungrouped}` 分目录。
 - `hive.localScanDir`：本地源文件检查根目录，内部按 `{categoryCode}/{groupCode 可选}` 分目录。
+
+## 下载与解冻协作
+
+- `HiveFileArchiveController` 负责向 OSS 发起或查询归档解冻，并将恢复状态和有效期写回 `HiveRecord`。
+- `HiveDownloadService` 使用该有效期阻止冻结归档下载；下载 Controller 在启动前先修复没有内存任务的过期 `downloading` 状态，再按统一资格决定是否创建任务。
+- 下载任务使用 `.part` 临时文件；成功后移动为最终副本，失败或过期修复时删除临时文件。
 
 ## 相关文件
 

@@ -12,7 +12,7 @@
 ## 状态定义
 
 - `UPLOADING`：上传中，OSS 对象可能尚未完整写入。
-- `UPLOADED`：DB 与 OSS 已匹配，可下载、预览、分组、按策略删除。
+- `UPLOADED`：DB 与 OSS 已匹配；满足下载资格时可下载，也可预览、分组、按策略删除。
 - `FAILED`：上传失败，可重新上传进入 `UPLOADING`。
 - `OSS_ONLY`：OSS 有对象，但 DB 没有解密元数据，不允许自动变成 `UPLOADED`。
 - `DB_ONLY`：DB 有记录，但当前扫描未在 OSS 发现对象，不走普通 OSS 删除。
@@ -72,6 +72,12 @@ stateDiagram-v2
 - `UPLOADING`：返回 `409 Conflict`。
 - `TO_BE_DELETED`：返回 `409 Conflict`，要求先执行删除。
 - `DB_ONLY` / `OSS_ONLY`：返回 `409 Conflict`，要求先清理或重新同步确认。
+
+### 下载与归档解冻
+
+- 下载不是 `HiveRecord.status` 的状态转移。只有 `UPLOADED` 记录可创建下载任务；`UPLOADING`、`FAILED`、`OSS_ONLY`、`DB_ONLY`、`TO_BE_DELETED` 都返回 `409 Conflict`。
+- 下载另有任务状态：`null -> downloading -> success/failed`。目标本地副本存在或任务仍为 `downloading` 时不能再次下载；释放副本后清空该任务状态。
+- `ARCHIVE` 分类还要求对象已解冻：`restoreTime` 为空或早于当前时间即为冻结，下载返回 `423 Locked`。解冻状态由 `NOT_STARTED`、`IN_PROGRESS`、`COMPLETED` 表示；`COMPLETED` 同时保存对象存储返回的有效截止时间。
 
 ### 标记删除与执行删除
 

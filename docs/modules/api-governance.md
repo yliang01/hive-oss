@@ -75,6 +75,17 @@
 - 文件列表接口中的 `localFileAvailable`：
   - 后端按下载目录实时计算；
   - 仅控制下载与释放操作，不包含物理路径。
+- 创建下载任务 `POST /categories/{category}/files/download-task/{fileKey}`：
+  - 服务端强制要求记录为 `UPLOADED`、归档对象已解冻、下载状态不是 `downloading` 且本地副本不存在；文件列表中的 `downloadable` 使用同一规则；
+  - 冻结归档返回 `423 Locked`；其他资格不满足的情况返回 `409 Conflict` 和 `{ "error": "..." }`；
+  - 若 DB 为 `downloading` 但内存任务已丢失，服务端先删除 `.part` 文件并标记为 `failed`，再在当前请求创建替代任务。
+
+## 解冻任务契约
+
+- 解冻与状态查询仅接受 `storageClass=ARCHIVE` 的分类，其他分类返回 `400 Bad Request`。
+- `restorable=true` 表示 `unfreezeTime` 缺失或已过期，归档对象尚不可下载。
+- 解冻接口依据 OSS 状态返回：`NOT_STARTED` 时发起恢复并返回 `202 Accepted`，`IN_PROGRESS` 返回 `202 Accepted`，`COMPLETED` 保存有效截止时间并返回 `200 OK`。
+- `unfreezeStatus=IN_PROGRESS` 仅用于页面重载后恢复轮询；下载资格以有效期和 `restorable` 为准。
 
 ## 本轮执行结果
 
