@@ -7,6 +7,7 @@ import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.controller.vo.HiveLocalReuploadRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveLocalReuploadStatusVO;
+import cc.cc3c.hive.oss.service.HiveLocalCheckService.LocalCheckResult;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.client.vo.HiveOssObject;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
@@ -20,7 +21,6 @@ import org.springframework.stereotype.Service;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HiveLocalReuploadService {
 
     private final HiveRecordRepository hiveRecordRepository;
-    private final HiveLocalScanService hiveLocalScanService;
+    private final HiveLocalCheckService hiveLocalCheckService;
     private final HiveOssService hiveOssService;
     private final HiveRecordStateService stateService;
     private final ThumbnailAsyncService thumbnailAsyncService;
@@ -39,12 +39,12 @@ public class HiveLocalReuploadService {
     private final Map<String, String> reuploading = new ConcurrentHashMap<>();
 
     public HiveLocalReuploadService(HiveRecordRepository hiveRecordRepository,
-                                    HiveLocalScanService hiveLocalScanService,
+                                     HiveLocalCheckService hiveLocalCheckService,
                                     HiveOssService hiveOssService,
                                     HiveRecordStateService stateService,
                                     ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
-        this.hiveLocalScanService = hiveLocalScanService;
+        this.hiveLocalCheckService = hiveLocalCheckService;
         this.hiveOssService = hiveOssService;
         this.stateService = stateService;
         this.thumbnailAsyncService = thumbnailAsyncService;
@@ -77,6 +77,9 @@ public class HiveLocalReuploadService {
         boolean uploadAttempted = false;
         try {
             HiveRecord record = task.getRecord();
+            if (Files.size(task.getLocalFile()) != task.getLocalSize()) {
+                throw new LocalReuploadConflictException("本地文件已变化，请刷新列表后再确认上传");
+            }
             try (InputStream inputStream = Files.newInputStream(task.getLocalFile())) {
                 HiveOssTask uploadTask = HiveOssTask.createTask()
                         .withBucket(category.bucketName())
@@ -96,9 +99,6 @@ public class HiveLocalReuploadService {
             }
             stateService.refreshReuploaded(record, record.getCategory(), metadata, category.storageClass());
             record.setOriginalSize(task.getLocalSize());
-            record.setLocalCheckStatus(HiveLocalCheckStatus.SIZE_MATCHED);
-            record.setLocalCheckTime(LocalDateTime.now());
-            record.setLocalCheckObservedSize(task.getLocalSize());
             hiveRecordRepository.save(record);
             String message = refreshThumbnail(record, category, task.getLocalFile());
             task.setStatus(ReuploadStatus.SUCCESS);
@@ -134,8 +134,8 @@ public class HiveLocalReuploadService {
     }
 
     private ReuploadTask validate(CategoryContext category, HiveLocalReuploadRequest request) throws Exception {
-        if (request == null || request.getObservedSize() == null || request.getLocalCheckTime() == null) {
-            throw new IllegalArgumentException("localCheckTime and observedSize are required");
+        if (request == null) {
+            throw new IllegalArgumentException("request is required");
         }
         String fileKey = FileKeyNormalizer.normalize(request.getFileKey());
         if (fileKey == null || fileKey.isBlank()) {
@@ -149,32 +149,16 @@ public class HiveLocalReuploadService {
         if (!HiveRecordStatus.UPLOADED.equals(record.getStatus())) {
             throw new LocalReuploadConflictException("文件当前不是已上传状态");
         }
-        if (!HiveLocalCheckStatus.SIZE_CHANGED.equals(record.getLocalCheckStatus())
-                && !HiveLocalCheckStatus.BASELINE_MISSING.equals(record.getLocalCheckStatus())) {
-            throw new LocalReuploadConflictException("文件本地状态不允许重新上传，请先重新检查本地文件");
-        }
-        if (!request.getLocalCheckTime().equals(record.getLocalCheckTime())
-                || !request.getObservedSize().equals(record.getLocalCheckObservedSize())) {
-            throw new LocalReuploadConflictException("本地检查结果已过期，请重新检查后再确认上传");
-        }
-        String groupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
-        Path localFile = hiveLocalScanService.resolveExistingLocalFile(category.code(), record.getFileName(), groupCode);
-        long localSize = Files.size(localFile);
-        if (localSize != request.getObservedSize()) {
-            throw new LocalReuploadConflictException("本地文件已变化，请重新检查后再确认上传");
-        }
-        if (HiveLocalCheckStatus.SIZE_CHANGED.equals(record.getLocalCheckStatus())
-                && record.getOriginalSize() == null) {
-            throw new LocalReuploadConflictException("文件大小基线异常，请重新检查本地文件");
-        }
-        if (record.getOriginalSize() != null && localSize == record.getOriginalSize()) {
-            throw new LocalReuploadConflictException("本地文件大小已恢复一致，请重新检查本地文件");
+        LocalCheckResult localCheck = hiveLocalCheckService.checkRecord(category.code(), record);
+        if (!HiveLocalCheckStatus.SIZE_CHANGED.equals(localCheck.status())
+                && !HiveLocalCheckStatus.BASELINE_MISSING.equals(localCheck.status())) {
+            throw new LocalReuploadConflictException("文件本地状态不允许重新上传，请刷新列表后再确认上传");
         }
         return ReuploadTask.builder()
                 .taskId(UUID.randomUUID().toString())
                 .record(record)
-                .localFile(localFile)
-                .localSize(localSize)
+                .localFile(localCheck.localFile())
+                .localSize(localCheck.observedSize())
                 .status(ReuploadStatus.RUNNING)
                 .build();
     }

@@ -152,15 +152,6 @@ public class FileCategoryService {
                 .lastSyncDbToOssMismatched(category.getLastSyncDbToOssMismatched())
                 .lastSyncSkipped(category.getLastSyncSkipped())
                 .lastSyncMessage(category.getLastSyncMessage())
-                .lastLocalCheckTime(category.getLastLocalCheckTime())
-                .lastLocalCheckStatus(category.getLastLocalCheckStatus())
-                .lastLocalCheckRecordTotal(category.getLastLocalCheckRecordTotal())
-                .lastLocalCheckSizeMatched(category.getLastLocalCheckSizeMatched())
-                .lastLocalCheckSizeChanged(category.getLastLocalCheckSizeChanged())
-                .lastLocalCheckMissing(category.getLastLocalCheckMissing())
-                .lastLocalCheckUnverifiable(category.getLastLocalCheckUnverifiable())
-                .lastLocalCheckBaselineMissing(category.getLastLocalCheckBaselineMissing())
-                .lastLocalCheckMessage(category.getLastLocalCheckMessage())
                 .build();
     }
 }

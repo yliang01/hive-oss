@@ -47,11 +47,13 @@
 
 创建下载任务时若目标本地副本已存在，或下载进行中时请求释放本地副本，接口返回 `409 Conflict`。
 
-下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在本地副本或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
+下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在下载副本、本地源文件或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
+
+文件列表与批量详情会即时检查 `hive.localScanDir` 中当前返回记录的本地源文件。`localCheckStatus` 与 `localCheckObservedSize` 仅存在于响应中；重新上传请求只提交 `fileKey`，由服务端再次检查文件。
 
 ## 关键配置项
 
-- 无模块专属配置 key；依赖全局 `hive.downloadDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
+- 无模块专属配置 key；依赖全局 `hive.downloadDir`、`hive.localScanDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
 
 ## 相关文件
 

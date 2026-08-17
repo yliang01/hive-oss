@@ -25,7 +25,6 @@ public class HiveRecordVO {
     private Integer downloadProgress;
     private Boolean localFileAvailable;
     private String localCheckStatus;
-    private LocalDateTime localCheckTime;
     private Long localCheckObservedSize;
     private Boolean deletable;
     private Boolean previewable;

@@ -8,6 +8,7 @@ import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.service.FileCategoryService;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
+import cc.cc3c.hive.oss.service.HiveLocalCheckService.LocalCheckResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.web.CategoryContext;
 import cc.cc3c.hive.oss.web.CategoryFileContext;
@@ -62,7 +63,8 @@ public class HiveRecordVOAssembler {
         this.previewMaxSizeBytes = previewMaxSizeBytes;
     }
 
-    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context, Optional<HiveRecordImageMeta> imageMeta) {
+    public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context,
+                                          Optional<HiveRecordImageMeta> imageMeta, LocalCheckResult localCheck) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
         boolean restorable = isRestorable(fileContext);
         boolean localFileAvailable = hiveDownloadService.isDownloadFileAvailable(fileContext);
@@ -94,10 +96,8 @@ public class HiveRecordVOAssembler {
                 .downloadStatus(record.getDownloadStatus() == null ? null : record.getDownloadStatus().name())
                 .downloadProgress(downloadTask == null ? null : downloadTask.getProgress())
                 .localFileAvailable(localFileAvailable)
-                .localCheckStatus(HiveRecordStatus.UPLOADED.equals(record.getStatus()) && record.getLocalCheckStatus() != null
-                        ? record.getLocalCheckStatus().name() : null)
-                .localCheckTime(HiveRecordStatus.UPLOADED.equals(record.getStatus()) ? record.getLocalCheckTime() : null)
-                .localCheckObservedSize(HiveRecordStatus.UPLOADED.equals(record.getStatus()) ? record.getLocalCheckObservedSize() : null)
+                .localCheckStatus(localCheck == null ? null : localCheck.status().name())
+                .localCheckObservedSize(localCheck == null ? null : localCheck.observedSize())
                 .deletable(record.getDeletable())
                 .previewable(previewDecision.previewable())
                 .previewUrl(previewUrl)

@@ -13,6 +13,8 @@ import cc.cc3c.hive.oss.service.HiveRecordQueryService;
 import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveRecordStateService;
 import cc.cc3c.hive.oss.service.HiveRecordStateTransitionException;
+import cc.cc3c.hive.oss.service.HiveLocalCheckService;
+import cc.cc3c.hive.oss.service.HiveLocalCheckService.LocalCheckResult;
 import cc.cc3c.hive.oss.thumbnail.ThumbnailAsyncService;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
 import cc.cc3c.hive.oss.web.CategoryContext;
@@ -20,6 +22,7 @@ import cc.cc3c.hive.oss.web.FileKeyNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Page;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +34,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 public class HiveFileController {
+    private static final int MAX_PAGE_SIZE = 50;
 
     private final HiveRecordRepository hiveRecordRepository;
     private final HiveRecordImageMetaRepository imageMetaRepository;
@@ -39,8 +43,9 @@ public class HiveFileController {
     private final HiveOssService hiveOssService;
     private final ThumbnailAsyncService thumbnailAsyncService;
     private final HiveRecordStateService stateService;
+    private final HiveLocalCheckService hiveLocalCheckService;
 
-    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, HiveRecordVOAssembler assembler, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService, HiveRecordStateService stateService) {
+    public HiveFileController(HiveRecordRepository hiveRecordRepository, HiveRecordImageMetaRepository imageMetaRepository, HiveRecordQueryService hiveRecordQueryService, HiveRecordVOAssembler assembler, HiveOssService hiveOssService, ThumbnailAsyncService thumbnailAsyncService, HiveRecordStateService stateService, HiveLocalCheckService hiveLocalCheckService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.imageMetaRepository = imageMetaRepository;
         this.hiveRecordQueryService = hiveRecordQueryService;
@@ -48,6 +53,7 @@ public class HiveFileController {
         this.hiveOssService = hiveOssService;
         this.thumbnailAsyncService = thumbnailAsyncService;
         this.stateService = stateService;
+        this.hiveLocalCheckService = hiveLocalCheckService;
     }
 
     @GetMapping("/categories/{category}/files:batch-get")
@@ -62,22 +68,26 @@ public class HiveFileController {
         }
         List<HiveRecord> records = hiveRecordRepository
                 .findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(category.categoryId(), normalizedKeys);
-        return ResponseEntity.ok(buildRecordVOs(category, records));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(buildRecordVOs(category, records));
     }
 
     @GetMapping("/categories/{category}/files")
-    public HiveRecordsVO getFiles(CategoryContext category,
+    public ResponseEntity<HiveRecordsVO> getFiles(CategoryContext category,
                                   @RequestParam(value = "groupCode", required = false) String groupCode,
                                   @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam("page") Integer page,
                                   @RequestParam("pageSize") Integer pageSize) {
+        if (page == null || page < 0 || pageSize == null || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+            return ResponseEntity.badRequest().build();
+        }
         Long categoryId = category.categoryId();
         Page<HiveRecord> pageResult = hiveRecordQueryService.query(categoryId,
                 new FileQueryParams(groupCode, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize));
 
         List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
-        return HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
+        HiveRecordsVO result = HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
     }
 
     private List<HiveRecordVO> buildRecordVOs(CategoryContext context, List<HiveRecord> records) {
@@ -87,9 +97,10 @@ public class HiveFileController {
         List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
         Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
                 .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
+        Map<Integer, LocalCheckResult> localChecks = hiveLocalCheckService.checkRecords(context.code(), records);
         return records.stream()
                 .map(record -> assembler.buildHiveRecordVO(record, context,
-                        Optional.ofNullable(imageMetaMap.get(record.getId()))))
+                        Optional.ofNullable(imageMetaMap.get(record.getId())), localChecks.get(record.getId())))
                 .toList();
     }
 
