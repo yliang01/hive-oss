@@ -21,6 +21,8 @@ class FlywayLocalCheckMigrationTest {
             assertThat(columnExists(connection, "hive_record", "local_check_status")).isFalse();
             assertThat(columnExists(connection, "hive_record", "local_check_time")).isFalse();
             assertThat(columnExists(connection, "hive_record", "local_check_observed_size")).isFalse();
+            assertThat(columnExists(connection, "hive_record_image_meta", "image_width")).isFalse();
+            assertThat(columnExists(connection, "hive_record_image_meta", "image_height")).isFalse();
             assertThat(columnExists(connection, "file_category", "last_local_check_time")).isFalse();
             assertThat(columnExists(connection, "file_category", "last_local_scan_time")).isFalse();
         }

@@ -98,8 +98,6 @@ public class ThumbnailAsyncService {
         });
         meta.setThumbKey(null);
         meta.setThumbStatus("PENDING");
-        meta.setImageWidth(null);
-        meta.setImageHeight(null);
         meta.setUpdatedAt(now);
         imageMetaRepository.save(meta);
         FileUtils.deleteQuietly(thumbnailCacheFileFor(fileKey));
@@ -126,8 +124,6 @@ public class ThumbnailAsyncService {
             hiveOssService.using(hiveRecord.getProvider()).uploadSync(thumbTask);
             meta.setThumbKey(thumbKey);
             meta.setThumbStatus("READY");
-            meta.setImageWidth(thumb.imageWidth());
-            meta.setImageHeight(thumb.imageHeight());
             meta.setUpdatedAt(LocalDateTime.now());
             imageMetaRepository.save(meta);
             log.info("thumbnail ready fileKey={}", fileKey);

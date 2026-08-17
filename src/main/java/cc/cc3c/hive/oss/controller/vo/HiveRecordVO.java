@@ -31,11 +31,6 @@ public class HiveRecordVO {
     private String previewUrl;
     private String mimeType;
     private String previewBlockedReason;
-    private Long previewMaxSizeBytes;
-    /** URL to load thumbnail image (when thumbStatus is READY). Falls back to previewUrl if absent. */
+    /** URL to load a ready thumbnail image. Falls back to previewUrl if absent. */
     private String thumbnailUrl;
-    private String thumbKey;
-    private String thumbStatus;
-    private Integer imageWidth;
-    private Integer imageHeight;
 }

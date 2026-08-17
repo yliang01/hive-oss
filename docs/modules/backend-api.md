@@ -58,6 +58,12 @@
 
 文件列表与批量详情会即时检查 `hive.localScanDir` 中当前返回记录的本地源文件。`localCheckStatus` 与 `localCheckObservedSize` 仅存在于响应中；重新上传请求只提交 `fileKey`，由服务端再次检查文件。
 
+## 预览契约
+
+文件列表和批量详情返回 `previewable`、`previewUrl`、`thumbnailUrl`、`mimeType` 与 `previewBlockedReason`。`HiveRecordVOAssembler` 和主预览接口使用同一判定顺序：`uiVariant=archive`、`OSS_ONLY`、冻结归档、超过 `hive.preview.max-size-bytes`、扩展名不受支持。阻断原因依次为 `ARCHIVE`、`OSS_ONLY`、`FROZEN`、`TOO_LARGE`、`UNSUPPORTED_TYPE`。
+
+主预览入口是 `GET /categories/{category}/files/preview/{fileKey}`，只在判定允许时以解密流返回内容；`FROZEN` 返回 `423 Locked`，`TOO_LARGE` 返回 `413 Payload Too Large`，其他拒绝原因返回 `415 Unsupported Media Type`。`thumbnailUrl` 指向独立的 JPEG 缩略图入口，不暴露 OSS key、缩略图状态或图片尺寸等内部元数据。
+
 ## 关键配置项
 
 - 无模块专属配置 key；依赖全局 `hive.downloadDir`、`hive.localScanDir` 及 Spring 多部分上传限制（Controller 内 100MB）。

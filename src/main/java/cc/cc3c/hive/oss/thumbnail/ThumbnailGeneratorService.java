@@ -27,10 +27,8 @@ public class ThumbnailGeneratorService {
 
     private static final List<String> SUPPORTED_EXTENSIONS = List.of("jpg", "jpeg", "png", "gif", "webp");
 
-    /**
-     * Result of thumbnail generation: JPEG bytes and original dimensions.
-     */
-    public record ThumbResult(byte[] thumbJpeg, int imageWidth, int imageHeight) {}
+    /** Result of thumbnail generation. */
+    public record ThumbResult(byte[] thumbJpeg) {}
 
     /**
      * Returns true if the file name suggests an image type we can thumbnail.
@@ -91,6 +89,6 @@ public class ThumbnailGeneratorService {
         if (!ImageIO.write(thumb, THUMB_FORMAT, out)) {
             return java.util.Optional.empty();
         }
-        return java.util.Optional.of(new ThumbResult(out.toByteArray(), w, h));
+        return java.util.Optional.of(new ThumbResult(out.toByteArray()));
     }
 }

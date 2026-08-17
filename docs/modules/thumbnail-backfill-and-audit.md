@@ -19,7 +19,7 @@
    - 用现有 `HiveDownloadService` 或等价逻辑将原图下载到临时流/文件（走解密）。
    - 调用 `ThumbnailGeneratorService.generateFromFile` 或 `generateFromStream` 生成缩略图。
    - 使用 `ThumbnailKeyHelper.thumbKey(fileKey)`、`thumbFileNameForEncryption(fileKey)`，通过 `HiveOssTask.withEncryption(thumbFileName)` 上传缩略图到同桶。
-   - 创建或更新 `hive_record_image_meta`：`thumb_key`、`thumb_status=READY`、`image_width`、`image_height`；失败则设 `thumb_status=FAILED`，不阻塞其余记录。
+   - 创建或更新 `hive_record_image_meta`：`thumb_key`、`thumb_status=READY`；失败则设 `thumb_status=FAILED`，不阻塞其余记录。
 3. 失败不阻断：单条异常记日志并继续下一批。
 
 ### 与加密的约束

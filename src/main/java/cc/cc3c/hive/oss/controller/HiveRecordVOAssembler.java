@@ -5,7 +5,6 @@ import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
-import cc.cc3c.hive.oss.service.FileCategoryService;
 import cc.cc3c.hive.oss.service.HiveDownloadService;
 import cc.cc3c.hive.oss.service.HiveLocalCheckService.LocalCheckResult;
 import cc.cc3c.hive.oss.vendor.vo.HiveOssTask;
@@ -47,12 +46,10 @@ public class HiveRecordVOAssembler {
             Map.entry("md", "text/markdown")
     );
 
-    private final FileCategoryService fileCategoryService;
     private final HiveDownloadService hiveDownloadService;
     private long previewMaxSizeBytes;
 
-    public HiveRecordVOAssembler(FileCategoryService fileCategoryService, HiveDownloadService hiveDownloadService) {
-        this.fileCategoryService = fileCategoryService;
+    public HiveRecordVOAssembler(HiveDownloadService hiveDownloadService) {
         this.hiveDownloadService = hiveDownloadService;
     }
 
@@ -98,13 +95,8 @@ public class HiveRecordVOAssembler {
                 .previewable(previewDecision.previewable())
                 .previewUrl(previewUrl)
                 .thumbnailUrl(thumbnailUrl)
-                .thumbKey(imageMeta.map(HiveRecordImageMeta::getThumbKey).orElse(null))
-                .thumbStatus(imageMeta.map(HiveRecordImageMeta::getThumbStatus).orElse(null))
-                .imageWidth(imageMeta.map(HiveRecordImageMeta::getImageWidth).orElse(null))
-                .imageHeight(imageMeta.map(HiveRecordImageMeta::getImageHeight).orElse(null))
                 .mimeType(previewDecision.mimeType())
                 .previewBlockedReason(previewDecision.blockedReason())
-                .previewMaxSizeBytes(previewMaxSizeBytes)
                 .build();
     }
 
