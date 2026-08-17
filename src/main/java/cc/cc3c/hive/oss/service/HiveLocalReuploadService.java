@@ -1,6 +1,5 @@
 package cc.cc3c.hive.oss.service;
 
-import cc.cc3c.hive.domain.entity.FileCategoryEntity;
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.model.HiveLocalCheckStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
@@ -40,9 +39,9 @@ public class HiveLocalReuploadService {
 
     public HiveLocalReuploadService(HiveRecordRepository hiveRecordRepository,
                                      HiveLocalCheckService hiveLocalCheckService,
-                                    HiveOssService hiveOssService,
-                                    HiveRecordStateService stateService,
-                                    ThumbnailAsyncService thumbnailAsyncService) {
+                                     HiveOssService hiveOssService,
+                                     HiveRecordStateService stateService,
+                                     ThumbnailAsyncService thumbnailAsyncService) {
         this.hiveRecordRepository = hiveRecordRepository;
         this.hiveLocalCheckService = hiveLocalCheckService;
         this.hiveOssService = hiveOssService;
@@ -52,11 +51,12 @@ public class HiveLocalReuploadService {
 
     public HiveLocalReuploadStatusVO reuploadLocal(CategoryContext category, HiveLocalReuploadRequest request) throws Exception {
         ReuploadTask task = validate(category, request);
-        if (reuploading.putIfAbsent(task.record.getFileKey(), "") != null) {
+        String reuploadKey = category.categoryId() + ":" + task.record.getFileKey();
+        if (reuploading.putIfAbsent(reuploadKey, "") != null) {
             throw new LocalReuploadConflictException("文件正在重新上传，请稍后重试");
         }
         tasks.put(task.getTaskId(), task);
-        Thread.ofVirtual().start(() -> doReuploadLocal(category, task));
+        Thread.ofVirtual().start(() -> doReuploadLocal(category, task, reuploadKey));
         return HiveLocalReuploadStatusVO.builder().taskId(task.getTaskId()).status(ReuploadStatus.RUNNING.name()).build();
     }
 
@@ -67,18 +67,18 @@ public class HiveLocalReuploadService {
         }
         return HiveLocalReuploadStatusVO.builder()
                 .taskId(task.taskId)
-                .fileKey(task.getRecord().getFileKey())
+                .fileKey(task.record.getFileKey())
                 .status(task.status.name())
                 .message(task.message)
                 .build();
     }
 
-    private void doReuploadLocal(CategoryContext category, ReuploadTask task) {
+    private void doReuploadLocal(CategoryContext category, ReuploadTask task, String reuploadKey) {
         boolean uploadAttempted = false;
         try {
             HiveRecord record = task.getRecord();
             if (Files.size(task.getLocalFile()) != task.getLocalSize()) {
-                throw new LocalReuploadConflictException("本地文件已变化，请刷新列表后再确认上传");
+                throw new LocalReuploadConflictException("本地副本已变化，请刷新列表后再确认上传");
             }
             try (InputStream inputStream = Files.newInputStream(task.getLocalFile())) {
                 HiveOssTask uploadTask = HiveOssTask.createTask()
@@ -116,7 +116,7 @@ public class HiveLocalReuploadService {
                 task.setMessage(safeMessage(e));
             }
         } finally {
-            reuploading.remove(task.getRecord().getFileKey());
+            reuploading.remove(reuploadKey);
         }
     }
 
@@ -133,7 +133,7 @@ public class HiveLocalReuploadService {
         }
     }
 
-    private ReuploadTask validate(CategoryContext category, HiveLocalReuploadRequest request) throws Exception {
+    private ReuploadTask validate(CategoryContext category, HiveLocalReuploadRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request is required");
         }
@@ -149,10 +149,10 @@ public class HiveLocalReuploadService {
         if (!HiveRecordStatus.UPLOADED.equals(record.getStatus())) {
             throw new LocalReuploadConflictException("文件当前不是已上传状态");
         }
-        LocalCheckResult localCheck = hiveLocalCheckService.checkRecord(category.code(), record);
+        LocalCheckResult localCheck = hiveLocalCheckService.checkRecord(category, record);
         if (!HiveLocalCheckStatus.SIZE_CHANGED.equals(localCheck.status())
                 && !HiveLocalCheckStatus.BASELINE_MISSING.equals(localCheck.status())) {
-            throw new LocalReuploadConflictException("文件本地状态不允许重新上传，请刷新列表后再确认上传");
+            throw new LocalReuploadConflictException("本地副本状态不允许重新上传，请刷新列表后再确认上传");
         }
         return ReuploadTask.builder()
                 .taskId(UUID.randomUUID().toString())

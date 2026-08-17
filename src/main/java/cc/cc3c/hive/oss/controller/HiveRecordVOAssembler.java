@@ -2,6 +2,7 @@ package cc.cc3c.hive.oss.controller;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
+import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
@@ -22,11 +23,13 @@ import java.util.Optional;
 @Component
 public class HiveRecordVOAssembler {
 
-    static final String PREVIEW_BLOCKED_FROZEN = "FROZEN";
+    static final String PREVIEW_BLOCKED_ARCHIVE = "ARCHIVE";
+    static final String PREVIEW_BLOCKED_LOCAL_MISSING = "LOCAL_MISSING";
+    static final String PREVIEW_BLOCKED_ZIP_ARCHIVE = "ZIP_ARCHIVE";
+    static final String PREVIEW_BLOCKED_RECORD_NOT_READY = "RECORD_NOT_READY";
     static final String PREVIEW_BLOCKED_TOO_LARGE = "TOO_LARGE";
     static final String PREVIEW_BLOCKED_UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
     static final String PREVIEW_BLOCKED_OSS_ONLY = "OSS_ONLY";
-    static final String PREVIEW_BLOCKED_ARCHIVE = "ARCHIVE";
     static final Map<String, String> MIME_BY_EXTENSION = Map.of(
             "jpg", MediaType.IMAGE_JPEG_VALUE,
             "jpeg", MediaType.IMAGE_JPEG_VALUE,
@@ -59,18 +62,18 @@ public class HiveRecordVOAssembler {
     }
 
     public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context,
-                                          Optional<HiveRecordImageMeta> imageMeta, LocalCheckResult localCheck) {
+                                           Optional<HiveRecordImageMeta> imageMeta, LocalCheckResult localCheck) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
         boolean restorable = hiveDownloadService.isRestoreRequired(fileContext);
         boolean localFileAvailable = hiveDownloadService.isDownloadFileAvailable(fileContext);
         boolean downloadable = hiveDownloadService.isDownloadable(fileContext, record.getDownloadStatus());
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
                 ? hiveDownloadService.getDownLoadTask(record) : null;
-        PreviewDecision previewDecision = evaluatePreview(fileContext);
+        PreviewDecision previewDecision = evaluatePreview(fileContext, localFileAvailable);
         String previewUrl = previewDecision.previewable()
                 ? "/categories/" + context.code() + "/files/preview/" + record.getFileKey() : null;
         boolean thumbReady = imageMeta.map(m -> "READY".equals(m.getThumbStatus()) && StringUtils.isNotBlank(m.getThumbKey())).orElse(false);
-        String thumbnailUrl = thumbReady
+        String thumbnailUrl = isThumbnailAvailable(fileContext, thumbReady)
                 ? "/categories/" + context.code() + "/files/preview/thumbnail/" + record.getFileKey() : null;
         return HiveRecordVO.builder()
                 .groupCode(record.getGroup() == null ? null : record.getGroup().getGroupCode())
@@ -100,16 +103,19 @@ public class HiveRecordVOAssembler {
                 .build();
     }
 
-    public PreviewDecision evaluatePreview(CategoryFileContext file) {
+    public PreviewDecision evaluatePreview(CategoryFileContext file, boolean localFileAvailable) {
         String uiVariant = file.category().uiVariant();
-        if ("archive".equals(uiVariant)) {
+        if (CategoryStorageClass.ARCHIVE == file.category().storageClass() || "archive".equals(uiVariant)) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_ARCHIVE);
         }
         if (HiveRecordStatus.OSS_ONLY.equals(file.status())) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
         }
-        if (hiveDownloadService.isRestoreRequired(file)) {
-            return PreviewDecision.blocked(PREVIEW_BLOCKED_FROZEN);
+        if (HiveRecordStatus.UPLOADED != file.status()) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_RECORD_NOT_READY);
+        }
+        if (Boolean.TRUE.equals(file.zipped())) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_ZIP_ARCHIVE);
         }
         if (file.size() != null && previewMaxSizeBytes > 0 && file.size() > previewMaxSizeBytes) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_TOO_LARGE);
@@ -118,7 +124,17 @@ public class HiveRecordVOAssembler {
         if (mimeType == null) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_UNSUPPORTED_TYPE);
         }
+        if (!localFileAvailable) {
+            return PreviewDecision.blocked(PREVIEW_BLOCKED_LOCAL_MISSING);
+        }
         return PreviewDecision.allowed(mimeType);
+    }
+
+    public boolean isThumbnailAvailable(CategoryFileContext file, boolean thumbReady) {
+        return thumbReady
+                && "image".equalsIgnoreCase(file.category().uiVariant())
+                && CategoryStorageClass.ARCHIVE != file.category().storageClass()
+                && HiveRecordStatus.UPLOADED == file.status();
     }
 
     public String detectPreviewMimeType(String fileName, String uiVariant) {
