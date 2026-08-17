@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @Slf4j
 @RestController
 public class HiveFileDownloadController {
@@ -23,16 +25,19 @@ public class HiveFileDownloadController {
     }
 
     @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
-    public ResponseEntity<Void> downloadTask(CategoryFileContext context) {
+    public ResponseEntity<?> downloadTask(CategoryFileContext context) {
         try {
-            hiveDownloadService.reconcileStaleDownloading(context);
-            if (hiveDownloadService.isDownloadFileAvailable(context)) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            HiveDownloadStatus downloadStatus = hiveDownloadService.reconcileStaleDownloading(context);
+            if (hiveDownloadService.isRestoreRequired(context)) {
+                return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of("error", "归档文件尚未解冻"));
+            }
+            if (!hiveDownloadService.isDownloadable(context, downloadStatus)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", downloadBlockedMessage(context, downloadStatus)));
             }
             hiveDownloadService.download(context);
         } catch (Exception e) {
-            log.error("failed to download {}", context.key());
-            return ResponseEntity.internalServerError().build();
+            log.error("failed to download {}", context.key(), e);
+            return ResponseEntity.internalServerError().body(Map.of("error", "创建下载任务失败"));
         }
         return ResponseEntity.ok().build();
     }
@@ -64,5 +69,18 @@ public class HiveFileDownloadController {
             log.error("failed to release local file {}", context.key(), e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    private String downloadBlockedMessage(CategoryFileContext context, HiveDownloadStatus downloadStatus) {
+        if (context.status() != cc.cc3c.hive.domain.model.HiveRecordStatus.UPLOADED) {
+            return "文件当前状态不允许下载";
+        }
+        if (downloadStatus == HiveDownloadStatus.downloading) {
+            return "文件正在下载";
+        }
+        if (hiveDownloadService.isDownloadFileAvailable(context)) {
+            return "本地下载副本已存在，请先释放";
+        }
+        return "文件当前不可下载";
     }
 }

@@ -2,6 +2,7 @@ package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
+import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
@@ -22,6 +23,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -81,6 +83,18 @@ public class HiveDownloadService {
         return Files.isRegularFile(getDownloadFile(context).toPath(), LinkOption.NOFOLLOW_LINKS);
     }
 
+    public boolean isRestoreRequired(CategoryFileContext context) {
+        return CategoryStorageClass.ARCHIVE == context.category().storageClass()
+                && (context.restoreTime() == null || context.restoreTime().isBefore(LocalDateTime.now()));
+    }
+
+    public boolean isDownloadable(CategoryFileContext context, HiveDownloadStatus downloadStatus) {
+        return HiveRecordStatus.UPLOADED == context.status()
+                && !isRestoreRequired(context)
+                && downloadStatus != HiveDownloadStatus.downloading
+                && !isDownloadFileAvailable(context);
+    }
+
     public boolean hasLocalDownloadOrIsDownloading(String categoryCode, HiveRecord record) {
         if (HiveDownloadStatus.downloading == record.getDownloadStatus()) {
             return true;
@@ -101,7 +115,7 @@ public class HiveDownloadService {
     }
 
     public void download(CategoryFileContext context) throws Exception {
-        if (HiveDownloadStatus.downloading == context.downloadStatus()) {
+        if (downloadTasks.containsKey(taskMapKey(context))) {
             return;
         }
         File targetFile = getDownloadFile(context);

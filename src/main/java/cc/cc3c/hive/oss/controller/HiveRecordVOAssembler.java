@@ -2,7 +2,6 @@ package cc.cc3c.hive.oss.controller;
 
 import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.entity.HiveRecordImageMeta;
-import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
@@ -17,7 +16,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -66,11 +64,9 @@ public class HiveRecordVOAssembler {
     public HiveRecordVO buildHiveRecordVO(HiveRecord record, CategoryContext context,
                                           Optional<HiveRecordImageMeta> imageMeta, LocalCheckResult localCheck) {
         CategoryFileContext fileContext = CategoryFileContext.from(context, record);
-        boolean restorable = isRestorable(fileContext);
+        boolean restorable = hiveDownloadService.isRestoreRequired(fileContext);
         boolean localFileAvailable = hiveDownloadService.isDownloadFileAvailable(fileContext);
-        boolean downloadable = !restorable
-                && record.getDownloadStatus() != HiveDownloadStatus.downloading
-                && !localFileAvailable;
+        boolean downloadable = hiveDownloadService.isDownloadable(fileContext, record.getDownloadStatus());
         HiveOssTask downloadTask = record.getDownloadStatus() == HiveDownloadStatus.downloading
                 ? hiveDownloadService.getDownLoadTask(record) : null;
         PreviewDecision previewDecision = evaluatePreview(fileContext);
@@ -112,11 +108,6 @@ public class HiveRecordVOAssembler {
                 .build();
     }
 
-    public boolean isRestorable(CategoryFileContext file) {
-        return CategoryStorageClass.ARCHIVE == file.category().storageClass()
-                && (file.restoreTime() == null || file.restoreTime().isBefore(LocalDateTime.now()));
-    }
-
     public PreviewDecision evaluatePreview(CategoryFileContext file) {
         String uiVariant = file.category().uiVariant();
         if ("archive".equals(uiVariant)) {
@@ -125,7 +116,7 @@ public class HiveRecordVOAssembler {
         if (HiveRecordStatus.OSS_ONLY.equals(file.status())) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_OSS_ONLY);
         }
-        if (isRestorable(file)) {
+        if (hiveDownloadService.isRestoreRequired(file)) {
             return PreviewDecision.blocked(PREVIEW_BLOCKED_FROZEN);
         }
         if (file.size() != null && previewMaxSizeBytes > 0 && file.size() > previewMaxSizeBytes) {

@@ -26,11 +26,51 @@ class HiveFileDownloadControllerTest {
         CategoryFileContext context = context(null);
         when(downloadService.isDownloadFileAvailable(context)).thenReturn(true);
 
-        ResponseEntity<Void> response = controller.downloadTask(context);
+        ResponseEntity<?> response = controller.downloadTask(context);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         verify(downloadService).reconcileStaleDownloading(context);
         verify(downloadService, never()).download(context);
+    }
+
+    @Test
+    void rejectsFilesThatAreNotUploaded() throws Exception {
+        HiveDownloadService downloadService = mock(HiveDownloadService.class);
+        HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
+        CategoryFileContext context = context(HiveRecordStatus.OSS_ONLY, null, CategoryStorageClass.STANDARD);
+
+        ResponseEntity<?> response = controller.downloadTask(context);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        verify(downloadService).reconcileStaleDownloading(context);
+        verify(downloadService, never()).download(context);
+    }
+
+    @Test
+    void rejectsFrozenArchiveFiles() throws Exception {
+        HiveDownloadService downloadService = mock(HiveDownloadService.class);
+        HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
+        CategoryFileContext context = context(HiveRecordStatus.UPLOADED, null, CategoryStorageClass.ARCHIVE);
+        when(downloadService.isRestoreRequired(context)).thenReturn(true);
+
+        ResponseEntity<?> response = controller.downloadTask(context);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.LOCKED);
+        verify(downloadService, never()).download(context);
+    }
+
+    @Test
+    void startsAReplacementAfterReconcilingAStaleDownload() throws Exception {
+        HiveDownloadService downloadService = mock(HiveDownloadService.class);
+        HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
+        CategoryFileContext context = context(HiveRecordStatus.UPLOADED, HiveDownloadStatus.downloading, CategoryStorageClass.STANDARD);
+        when(downloadService.reconcileStaleDownloading(context)).thenReturn(HiveDownloadStatus.failed);
+        when(downloadService.isDownloadable(context, HiveDownloadStatus.failed)).thenReturn(true);
+
+        ResponseEntity<?> response = controller.downloadTask(context);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(downloadService).download(context);
     }
 
     @Test
@@ -45,8 +85,13 @@ class HiveFileDownloadControllerTest {
     }
 
     private CategoryFileContext context(HiveDownloadStatus downloadStatus) {
-        CategoryContext category = new CategoryContext(1L, "DOCS", "Docs", "bucket", CategoryStorageClass.STANDARD, "file");
+        return context(HiveRecordStatus.UPLOADED, downloadStatus, CategoryStorageClass.STANDARD);
+    }
+
+    private CategoryFileContext context(HiveRecordStatus recordStatus, HiveDownloadStatus downloadStatus,
+                                        CategoryStorageClass storageClass) {
+        CategoryContext category = new CategoryContext(1L, "DOCS", "Docs", "bucket", storageClass, "file");
         return new CategoryFileContext(category, "file-key", 1, "example.txt", "GROUP_A", false,
-                null, null, HiveRecordStatus.UPLOADED, null, null, downloadStatus);
+                null, null, recordStatus, null, null, downloadStatus);
     }
 }
