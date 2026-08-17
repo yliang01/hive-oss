@@ -2,68 +2,61 @@ package cc.cc3c.hive.oss.service;
 
 import cc.cc3c.hive.domain.entity.FileGroup;
 import cc.cc3c.hive.domain.entity.HiveRecord;
+import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveLocalCheckStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
+import cc.cc3c.hive.domain.repository.HiveRecordRepository;
+import cc.cc3c.hive.oss.web.CategoryContext;
 import org.apache.commons.io.FileUtils;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.testng.annotations.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class HiveLocalCheckServiceTest {
 
     @Test
-    void checksOnlyTheProvidedRecordsAgainstTheirCurrentGroupPath() throws Exception {
-        Path root = Files.createTempDirectory("hive-local-check-test");
+    void comparesTheManagedDownloadFileWithTheOriginalSize() throws Exception {
+        Path downloadDir = Files.createTempDirectory("hive-local-check-test");
         try {
-            HiveLocalCheckService service = service(root);
-            Path localFile = root.resolve("DOCS").resolve("GROUP_A").resolve("example.txt");
+            HiveDownloadService downloadService = new HiveDownloadService(
+                    mock(HiveRecordRepository.class), mock(HiveRecordImageMetaRepository.class), mock(HiveOssService.class));
+            downloadService.setDownloadDir(downloadDir.toString());
+            downloadService.init();
+            HiveLocalCheckService service = new HiveLocalCheckService(downloadService);
+            CategoryContext category = new CategoryContext(1L, "DOCS", "Docs", "bucket", CategoryStorageClass.STANDARD, "file");
+            HiveRecord record = record(4L);
+            Path localFile = downloadService.getDownloadFile(
+                    new cc.cc3c.hive.oss.web.CategoryFileContext(category, "file-key", 1, "example.txt", "GROUP_A", false,
+                            null, null, HiveRecordStatus.UPLOADED, null, null, null)).toPath();
             Files.createDirectories(localFile.getParent());
             Files.writeString(localFile, "changed");
-            HiveRecord record = record("GROUP_A", 1L);
 
-            HiveLocalCheckService.LocalCheckResult result = service.checkRecords("DOCS", List.of(record)).get(record.getId());
+            HiveLocalCheckService.LocalCheckResult result = service.checkRecord(category, record);
 
             assertThat(result.status()).isEqualTo(HiveLocalCheckStatus.SIZE_CHANGED);
-            assertThat(result.observedSize()).isEqualTo(Files.size(localFile));
+            assertThat(result.observedSize()).isEqualTo(7L);
             assertThat(result.localFile()).isEqualTo(localFile);
         } finally {
-            FileUtils.deleteDirectory(root.toFile());
+            FileUtils.deleteDirectory(downloadDir.toFile());
         }
     }
 
-    @Test
-    void marksRecordsUnverifiableWhenTheConfiguredRootIsUnavailable() {
-        HiveLocalCheckService service = service(Path.of("missing-local-check-root"));
-        HiveRecord record = record(null, 1L);
-
-        HiveLocalCheckService.LocalCheckResult result = service.checkRecords("DOCS", List.of(record)).get(record.getId());
-
-        assertThat(result.status()).isEqualTo(HiveLocalCheckStatus.UNVERIFIABLE);
-        assertThat(result.observedSize()).isNull();
-    }
-
-    private HiveLocalCheckService service(Path root) {
-        HiveLocalCheckService service = new HiveLocalCheckService();
-        ReflectionTestUtils.setField(service, "localScanDir", root.toString());
-        return service;
-    }
-
-    private HiveRecord record(String groupCode, long originalSize) {
+    private HiveRecord record(long originalSize) {
+        FileGroup group = new FileGroup();
+        group.setGroupCode("GROUP_A");
         HiveRecord record = new HiveRecord();
         record.setId(1);
+        record.setFileKey("file-key");
         record.setFileName("example.txt");
+        record.setZipped(false);
         record.setStatus(HiveRecordStatus.UPLOADED);
         record.setOriginalSize(originalSize);
-        if (groupCode != null) {
-            FileGroup group = new FileGroup();
-            group.setGroupCode(groupCode);
-            record.assignTo(group);
-        }
+        record.assignTo(group);
         return record;
     }
 }

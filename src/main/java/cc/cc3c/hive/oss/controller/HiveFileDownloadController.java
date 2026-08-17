@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.file.FileSystemException;
 import java.util.Map;
 
 @Slf4j
@@ -58,13 +59,15 @@ public class HiveFileDownloadController {
     }
 
     @PostMapping("/categories/{category}/files/release-local/{*fileKey}")
-    public ResponseEntity<Void> releaseLocal(CategoryFileContext context) {
+    public ResponseEntity<?> releaseLocal(CategoryFileContext context) {
         if (HiveDownloadStatus.downloading == context.downloadStatus()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
         try {
             hiveDownloadService.releaseLocalStatus(context);
             return ResponseEntity.ok().build();
+        } catch (FileSystemException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "本地文件正在使用，请稍后重试"));
         } catch (Exception e) {
             log.error("failed to release local file {}", context.key(), e);
             return ResponseEntity.internalServerError().build();

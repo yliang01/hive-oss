@@ -20,7 +20,6 @@ spring:
 
 hive:
   downloadDir: C:/Users/YLiang/Desktop/hive uploaded
-  localScanDir: C:/Users/YLiang/Desktop/hive uploaded
   imageCacheDir: ./data/image-cache
   imageCacheTtlDays: 7
   h2:

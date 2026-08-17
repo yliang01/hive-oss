@@ -54,19 +54,19 @@
 
 创建任务前会修正过期的 `downloading` 状态：若内存任务已不存在，服务端删除遗留 `.part` 文件、将 DB 状态更新为 `failed`，并在当前请求继续创建新任务。任务启动后状态为 `downloading`，成功落盘后为 `success`，失败后为 `failed`。释放本地文件只删除常规文件并清空下载状态；下载中释放仍返回 `409 Conflict`。
 
-下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在下载副本、本地源文件或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
+下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在下载副本或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
 
-文件列表与批量详情会即时检查 `hive.localScanDir` 中当前返回记录的本地源文件。`localCheckStatus` 与 `localCheckObservedSize` 仅存在于响应中；重新上传请求只提交 `fileKey`，由服务端再次检查文件。
+文件列表与批量详情会即时检查 `hive.downloadDir` 中当前返回记录的下载副本，并将副本大小和 `original_size` 比较。`localCheckStatus` 与 `localCheckObservedSize` 仅存在于响应中；大小变化的副本可通过重新上传接口覆盖 OSS，并以当前大小更新 `original_size` 基线。
 
 ## 预览契约
 
-文件列表和批量详情返回 `previewable`、`previewUrl`、`thumbnailUrl`、`mimeType` 与 `previewBlockedReason`。`HiveRecordVOAssembler` 和主预览接口使用同一判定顺序：`uiVariant=archive`、`OSS_ONLY`、冻结归档、超过 `hive.preview.max-size-bytes`、扩展名不受支持。阻断原因依次为 `ARCHIVE`、`OSS_ONLY`、`FROZEN`、`TOO_LARGE`、`UNSUPPORTED_TYPE`。
+文件列表和批量详情返回 `previewable`、`previewUrl`、`thumbnailUrl`、`mimeType` 与 `previewBlockedReason`。`HiveRecordVOAssembler` 和主预览接口使用同一判定顺序：归档分类、`OSS_ONLY`、非 `UPLOADED` 状态、ZIP、超过 `hive.preview.max-size-bytes`、扩展名不受支持、缺少本地副本。阻断原因依次为 `ARCHIVE`、`OSS_ONLY`、`RECORD_NOT_READY`、`ZIP_ARCHIVE`、`TOO_LARGE`、`UNSUPPORTED_TYPE`、`LOCAL_MISSING`。
 
-主预览入口是 `GET /categories/{category}/files/preview/{fileKey}`，只在判定允许时以解密流返回内容；`FROZEN` 返回 `423 Locked`，`TOO_LARGE` 返回 `413 Payload Too Large`，其他拒绝原因返回 `415 Unsupported Media Type`。`thumbnailUrl` 指向独立的 JPEG 缩略图入口，不暴露 OSS key、缩略图状态或图片尺寸等内部元数据。
+主预览入口是 `GET /categories/{category}/files/preview/{fileKey}`，只在判定允许时从受管下载目录流式返回内容，不再从 OSS 下载主文件。`LOCAL_MISSING` 和 `RECORD_NOT_READY` 返回 `409 Conflict`，`TOO_LARGE` 返回 `413 Payload Too Large`，其他拒绝原因返回 `415 Unsupported Media Type`。`thumbnailUrl` 指向独立的 OSS JPEG 缩略图入口，不暴露 OSS key、缩略图状态或图片尺寸等内部元数据。
 
 ## 关键配置项
 
-- 无模块专属配置 key；依赖全局 `hive.downloadDir`、`hive.localScanDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
+- 无模块专属配置 key；依赖全局 `hive.downloadDir` 及 Spring 多部分上传限制（Controller 内 100MB）。
 
 ## 相关文件
 

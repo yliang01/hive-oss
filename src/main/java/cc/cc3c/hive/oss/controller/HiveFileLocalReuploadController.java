@@ -7,7 +7,11 @@ import cc.cc3c.hive.oss.service.LocalReuploadConflictException;
 import cc.cc3c.hive.oss.web.CategoryContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -38,7 +42,7 @@ public class HiveFileLocalReuploadController {
 
     @GetMapping("/categories/{category}/files/local-reupload-tasks/{taskId}")
     public ResponseEntity<HiveLocalReuploadStatusVO> getReuploadStatus(CategoryContext category,
-                                                                       @PathVariable("taskId") String taskId) {
+                                                                        @PathVariable("taskId") String taskId) {
         HiveLocalReuploadStatusVO result = reuploadService.getStatus(taskId);
         return result == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(result);
     }

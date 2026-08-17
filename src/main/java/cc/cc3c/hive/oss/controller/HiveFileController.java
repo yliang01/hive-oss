@@ -97,7 +97,7 @@ public class HiveFileController {
         List<Integer> recordIds = records.stream().map(HiveRecord::getId).toList();
         Map<Integer, HiveRecordImageMeta> imageMetaMap = imageMetaRepository.findByHiveRecordIdIn(recordIds).stream()
                 .collect(Collectors.toMap(HiveRecordImageMeta::getHiveRecordId, m -> m));
-        Map<Integer, LocalCheckResult> localChecks = hiveLocalCheckService.checkRecords(context.code(), records);
+        Map<Integer, LocalCheckResult> localChecks = hiveLocalCheckService.checkRecords(context, records);
         return records.stream()
                 .map(record -> assembler.buildHiveRecordVO(record, context,
                         Optional.ofNullable(imageMetaMap.get(record.getId())), localChecks.get(record.getId())))

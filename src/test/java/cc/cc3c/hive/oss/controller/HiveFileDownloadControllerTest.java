@@ -78,7 +78,7 @@ class HiveFileDownloadControllerTest {
         HiveDownloadService downloadService = mock(HiveDownloadService.class);
         HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
 
-        ResponseEntity<Void> response = controller.releaseLocal(context(HiveDownloadStatus.downloading));
+        ResponseEntity<?> response = controller.releaseLocal(context(HiveDownloadStatus.downloading));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         verifyNoInteractions(downloadService);

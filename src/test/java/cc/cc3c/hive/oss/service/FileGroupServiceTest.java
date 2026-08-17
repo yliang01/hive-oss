@@ -23,9 +23,8 @@ class FileGroupServiceTest {
         FileGroupRepository groupRepository = mock(FileGroupRepository.class);
         HiveRecordRepository recordRepository = mock(HiveRecordRepository.class);
         HiveDownloadService downloadService = mock(HiveDownloadService.class);
-        HiveLocalCheckService localCheckService = mock(HiveLocalCheckService.class);
         FileGroupService service = new FileGroupService(groupRepository, recordRepository,
-                mock(FileCategoryService.class), downloadService, localCheckService);
+                mock(FileCategoryService.class), downloadService);
         FileGroup sourceGroup = group(1L, "SOURCE");
         FileGroup targetGroup = group(2L, "TARGET");
         HiveRecord record = record(sourceGroup);
@@ -47,9 +46,8 @@ class FileGroupServiceTest {
         FileGroupRepository groupRepository = mock(FileGroupRepository.class);
         HiveRecordRepository recordRepository = mock(HiveRecordRepository.class);
         HiveDownloadService downloadService = mock(HiveDownloadService.class);
-        HiveLocalCheckService localCheckService = mock(HiveLocalCheckService.class);
         FileGroupService service = new FileGroupService(groupRepository, recordRepository,
-                mock(FileCategoryService.class), downloadService, localCheckService);
+                mock(FileCategoryService.class), downloadService);
         FileGroup group = group(1L, "SOURCE");
         HiveRecord record = record(group);
 
@@ -65,28 +63,6 @@ class FileGroupServiceTest {
     }
 
     @Test
-    void rejectsAssignmentWhenARecordHasALocalSourceFile() {
-        FileGroupRepository groupRepository = mock(FileGroupRepository.class);
-        HiveRecordRepository recordRepository = mock(HiveRecordRepository.class);
-        HiveDownloadService downloadService = mock(HiveDownloadService.class);
-        HiveLocalCheckService localCheckService = mock(HiveLocalCheckService.class);
-        FileGroupService service = new FileGroupService(groupRepository, recordRepository,
-                mock(FileCategoryService.class), downloadService, localCheckService);
-        FileGroup sourceGroup = group(1L, "SOURCE");
-        FileGroup targetGroup = group(2L, "TARGET");
-        HiveRecord record = record(sourceGroup);
-
-        when(groupRepository.findByCategory_CodeAndGroupCodeIgnoreCase("DOCS", "TARGET")).thenReturn(Optional.of(targetGroup));
-        when(recordRepository.findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(1L, List.of("file-key")))
-                .thenReturn(List.of(record));
-        when(downloadService.hasLocalDownloadOrIsDownloading("DOCS", record)).thenReturn(false);
-        when(localCheckService.hasLocalSourceOrIsUnverifiable("DOCS", record)).thenReturn(true);
-
-        assertThatThrownBy(() -> service.assignFiles(1L, "DOCS", "TARGET", List.of("file-key"), "ui"))
-                .isInstanceOf(LocalDownloadGroupConflictException.class)
-                .hasMessageContaining("无法调整分组");
-    }
-
     private FileGroup group(Long id, String code) {
         FileGroup group = new FileGroup();
         group.setId(id);

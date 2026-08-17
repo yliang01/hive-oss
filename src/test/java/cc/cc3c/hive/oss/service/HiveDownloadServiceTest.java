@@ -5,12 +5,12 @@ import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
-import cc.cc3c.hive.oss.thumbnail.ThumbnailGeneratorService;
 import cc.cc3c.hive.oss.web.CategoryContext;
 import cc.cc3c.hive.oss.web.CategoryFileContext;
 import org.apache.commons.io.FileUtils;
 import org.testng.annotations.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -136,12 +136,49 @@ class HiveDownloadServiceTest {
         }
     }
 
+    @Test
+    void streamsPreviewFromTheManagedLocalDownloadFile() throws Exception {
+        Path downloadDir = Files.createTempDirectory("hive-download-test");
+        try {
+            HiveDownloadService service = service(mock(HiveRecordRepository.class), downloadDir);
+            CategoryFileContext context = context();
+            Path target = service.getDownloadFile(context).toPath();
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, "local preview");
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+            service.streamLocalPreview(context, output);
+
+            assertThat(output.toString()).isEqualTo("local preview");
+            assertThat(service.getAvailableDownloadFileSize(context)).isEqualTo(13L);
+        } finally {
+            FileUtils.deleteDirectory(downloadDir.toFile());
+        }
+    }
+
+    @Test
+    void rejectsUnsafeDownloadPathSegments() throws Exception {
+        Path downloadDir = Files.createTempDirectory("hive-download-test");
+        try {
+            HiveDownloadService service = service(mock(HiveRecordRepository.class), downloadDir);
+            CategoryFileContext unsafe = new CategoryFileContext(
+                    new CategoryContext(1L, "DOCS", "Docs", "bucket", CategoryStorageClass.STANDARD, "file"),
+                    "file-key", 1, "../secret.txt", "GROUP_A", false,
+                    null, null, HiveRecordStatus.UPLOADED, null, null, null);
+
+            assertThatThrownBy(() -> service.getDownloadFile(unsafe))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("文件名不能用于下载路径");
+        } finally {
+            FileUtils.deleteDirectory(downloadDir.toFile());
+        }
+    }
+
     private HiveDownloadService service(HiveRecordRepository recordRepository, Path downloadDir) {
         HiveDownloadService service = new HiveDownloadService(
                 recordRepository,
                 mock(HiveRecordImageMetaRepository.class),
-                mock(HiveOssService.class),
-                mock(ThumbnailGeneratorService.class)
+                mock(HiveOssService.class)
         );
         service.setDownloadDir(downloadDir.toString());
         service.init();

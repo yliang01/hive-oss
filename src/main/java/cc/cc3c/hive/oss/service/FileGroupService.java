@@ -24,18 +24,15 @@ public class FileGroupService {
     private final HiveRecordRepository hiveRecordRepository;
     private final FileCategoryService fileCategoryService;
     private final HiveDownloadService hiveDownloadService;
-    private final HiveLocalCheckService hiveLocalCheckService;
 
     public FileGroupService(FileGroupRepository fileGroupRepository,
-                             HiveRecordRepository hiveRecordRepository,
-                             FileCategoryService fileCategoryService,
-                             HiveDownloadService hiveDownloadService,
-                             HiveLocalCheckService hiveLocalCheckService) {
+                              HiveRecordRepository hiveRecordRepository,
+                              FileCategoryService fileCategoryService,
+                              HiveDownloadService hiveDownloadService) {
         this.fileGroupRepository = fileGroupRepository;
         this.hiveRecordRepository = hiveRecordRepository;
         this.fileCategoryService = fileCategoryService;
         this.hiveDownloadService = hiveDownloadService;
-        this.hiveLocalCheckService = hiveLocalCheckService;
     }
 
     public List<FileGroupVO> listGroups(String categoryCode) {
@@ -123,8 +120,7 @@ public class FileGroupService {
     }
 
     private void ensureGroupCanChange(String categoryCode, List<HiveRecord> records, String message) {
-        if (records.stream().anyMatch(record -> hiveDownloadService.hasLocalDownloadOrIsDownloading(categoryCode, record)
-                || hiveLocalCheckService.hasLocalSourceOrIsUnverifiable(categoryCode, record))) {
+        if (records.stream().anyMatch(record -> hiveDownloadService.hasLocalDownloadOrIsDownloading(categoryCode, record))) {
             throw new LocalDownloadGroupConflictException(message);
         }
     }
