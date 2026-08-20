@@ -9,6 +9,7 @@ import cc.cc3c.hive.oss.controller.vo.FileBulkMarkDeleteRequest;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordVO;
 import cc.cc3c.hive.oss.controller.vo.HiveRecordsVO;
 import cc.cc3c.hive.oss.service.FileQueryParams;
+import cc.cc3c.hive.oss.service.FileSortRule;
 import cc.cc3c.hive.oss.service.HiveRecordQueryService;
 import cc.cc3c.hive.oss.service.HiveOssService;
 import cc.cc3c.hive.oss.service.HiveRecordStateService;
@@ -74,16 +75,18 @@ public class HiveFileController {
     @GetMapping("/categories/{category}/files")
     public ResponseEntity<HiveRecordsVO> getFiles(CategoryContext category,
                                   @RequestParam(value = "groupCode", required = false) String groupCode,
-                                  @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
-                                  @RequestParam(value = "keyword", required = false) String keyword,
-                                  @RequestParam("page") Integer page,
+                                   @RequestParam(value = "ungroupedOnly", required = false) Boolean ungroupedOnly,
+                                   @RequestParam(value = "keyword", required = false) String keyword,
+                                   @RequestParam(value = "sort", required = false) List<String> sort,
+                                   @RequestParam("page") Integer page,
                                   @RequestParam("pageSize") Integer pageSize) {
         if (page == null || page < 0 || pageSize == null || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
             return ResponseEntity.badRequest().build();
         }
         Long categoryId = category.categoryId();
         Page<HiveRecord> pageResult = hiveRecordQueryService.query(categoryId,
-                new FileQueryParams(groupCode, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize));
+                new FileQueryParams(groupCode, Boolean.TRUE.equals(ungroupedOnly), keyword, page, pageSize,
+                        FileSortRule.parse(sort)));
 
         List<HiveRecordVO> list = buildRecordVOs(category, pageResult.stream().toList());
         HiveRecordsVO result = HiveRecordsVO.builder().files(list).total((int) pageResult.getTotalElements()).page(page).pageSize(pageSize).build();

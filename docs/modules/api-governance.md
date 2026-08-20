@@ -12,7 +12,7 @@
 | `home.js` | `DELETE /db-backup/{batchId}` | fetch | `DbBackupController#deleteBackup` | 保留 |
 | `files.js` | `GET /categories` | fetch | `HiveOssController#getCategories` | 保留 |
 | `files.js` | `GET /categories/{category}/groups` | fetch | `HiveOssController#getGroups` | 保留 |
-| `files.js` | `GET /categories/{category}/files` | fetch | `HiveOssController#getFiles` | 保留 |
+| Vue `files.ts` | `GET /categories/{category}/files?sort=field:direction` | axios | `HiveFileController#getFiles` | 保留；固定分组后，有序重复 `sort` 参数控制组内表头多级排序 |
 | `files.js` | `GET /categories/{category}/files/search` | fetch | `HiveOssController#searchFiles` | 保留 |
 | Vue `files.ts` | `GET /categories/{category}/files:batch-get?fileKeys=...` | axios | `HiveFileController#batchGetFiles` | 保留；操作后批量刷新记录状态 |
 | `files.js` | `POST /categories/{category}/files/download-task/{fileKey}` | fetch | `HiveOssController#downloadTask` | 保留 |

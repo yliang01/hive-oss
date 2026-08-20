@@ -5,6 +5,7 @@ public record FileQueryParams(
         boolean ungroupedOnly,
         String keyword,
         int page,
-        int pageSize
+        int pageSize,
+        java.util.List<FileSortRule> sortRules
 ) {
 }

@@ -26,8 +26,19 @@ public class HiveRecordQueryService {
     }
 
     public Page<HiveRecord> query(Long categoryId, FileQueryParams params) {
-        Pageable pageable = PageRequest.of(params.page(), params.pageSize(), Sort.by("id").descending());
+        Pageable pageable = PageRequest.of(params.page(), params.pageSize(), buildSort(params));
         return hiveRecordRepository.findAll(buildSpec(categoryId, params), pageable);
+    }
+
+    private Sort buildSort(FileQueryParams params) {
+        List<Sort.Order> orders = new ArrayList<>(List.of(
+                Sort.Order.asc("group.sortOrder"),
+                Sort.Order.asc("group.id")));
+        for (FileSortRule rule : params.sortRules()) {
+            orders.add(rule.field().toOrder(rule.direction()));
+        }
+        orders.add(Sort.Order.desc("id"));
+        return Sort.by(orders);
     }
 
     private Specification<HiveRecord> buildSpec(Long categoryId, FileQueryParams params) {

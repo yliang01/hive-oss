@@ -24,7 +24,7 @@
 | 能力 | 方法 | 路径（示例） |
 |------|------|----------------|
 | 分类列表 | GET | `/categories` |
-| 文件列表（含搜索/分组筛选） | GET | `/categories/{category}/files` |
+| 文件列表（含搜索/分组筛选/多级排序） | GET | `/categories/{category}/files` |
 | 批量获取文件详情 | GET | `/categories/{category}/files:batch-get?fileKeys=...` |
 | 标记删除文件 | POST | `/categories/{category}/files:mark-delete` |
 | 解冻 | POST | `/categories/{category}/files/unfreeze/{fileKey}` |
@@ -38,6 +38,8 @@
 | 上传 | POST | `/categories/{category}/files/upload`（multipart） |
 
 路径中的 `category` 映射到 `file_category.code`，再由 category 的 `bucket_name` 决定具体 OSS bucket。
+
+文件列表固定按分组组织：未分组优先，随后按分组的 `sortOrder asc` 和 `id asc` 排列。前端不能改变分组顺序。列表支持按出现顺序重复传递 `sort` 参数，为每个分组内的文件排序，例如 `?sort=updateTime:desc&sort=fileName:asc`。允许字段为 `updateTime`、`fileName`、`size`，方向为 `asc` 或 `desc`，最多三条且字段不得重复。服务端始终在用户规则后追加记录 `id desc`，保证组内分页顺序稳定。非法规则返回 `400 Bad Request`。
 
 ## 解冻与下载契约
 
