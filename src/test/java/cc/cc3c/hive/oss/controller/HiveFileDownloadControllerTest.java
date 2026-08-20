@@ -24,13 +24,12 @@ class HiveFileDownloadControllerTest {
         HiveDownloadService downloadService = mock(HiveDownloadService.class);
         HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
         CategoryFileContext context = context(null);
-        when(downloadService.isDownloadFileAvailable(context)).thenReturn(true);
+        when(downloadService.download(context)).thenReturn(false);
 
         ResponseEntity<?> response = controller.downloadTask(context);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        verify(downloadService).reconcileStaleDownloading(context);
-        verify(downloadService, never()).download(context);
+        verify(downloadService).download(context);
     }
 
     @Test
@@ -42,8 +41,7 @@ class HiveFileDownloadControllerTest {
         ResponseEntity<?> response = controller.downloadTask(context);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        verify(downloadService).reconcileStaleDownloading(context);
-        verify(downloadService, never()).download(context);
+        verify(downloadService).download(context);
     }
 
     @Test
@@ -60,12 +58,11 @@ class HiveFileDownloadControllerTest {
     }
 
     @Test
-    void startsAReplacementAfterReconcilingAStaleDownload() throws Exception {
+    void startsDownloadWhenServiceAdmitsIt() throws Exception {
         HiveDownloadService downloadService = mock(HiveDownloadService.class);
         HiveFileDownloadController controller = new HiveFileDownloadController(downloadService);
         CategoryFileContext context = context(HiveRecordStatus.UPLOADED, HiveDownloadStatus.downloading, CategoryStorageClass.STANDARD);
-        when(downloadService.reconcileStaleDownloading(context)).thenReturn(HiveDownloadStatus.failed);
-        when(downloadService.isDownloadable(context, HiveDownloadStatus.failed)).thenReturn(true);
+        when(downloadService.download(context)).thenReturn(true);
 
         ResponseEntity<?> response = controller.downloadTask(context);
 

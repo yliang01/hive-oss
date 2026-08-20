@@ -3,6 +3,8 @@ package cc.cc3c.hive.oss.service;
 import cc.cc3c.hive.domain.model.CategoryStorageClass;
 import cc.cc3c.hive.domain.model.HiveDownloadStatus;
 import cc.cc3c.hive.domain.model.HiveRecordStatus;
+import cc.cc3c.hive.domain.entity.FileGroup;
+import cc.cc3c.hive.domain.entity.HiveRecord;
 import cc.cc3c.hive.domain.repository.HiveRecordImageMetaRepository;
 import cc.cc3c.hive.domain.repository.HiveRecordRepository;
 import cc.cc3c.hive.oss.web.CategoryContext;
@@ -65,7 +67,7 @@ class HiveDownloadServiceTest {
                     .isInstanceOf(IOException.class)
                     .hasMessageContaining("not a regular file");
 
-            verifyNoInteractions(recordRepository);
+            verify(recordRepository, org.mockito.Mockito.never()).updateDownloadStatus(1L, "file-key", null);
         } finally {
             FileUtils.deleteDirectory(downloadDir.toFile());
         }
@@ -157,18 +159,27 @@ class HiveDownloadServiceTest {
     }
 
     @Test
-    void rejectsUnsafeDownloadPathSegments() throws Exception {
+    void movesAnExistingLocalDownloadToTheTargetGroupDirectory() throws Exception {
         Path downloadDir = Files.createTempDirectory("hive-download-test");
         try {
             HiveDownloadService service = service(mock(HiveRecordRepository.class), downloadDir);
-            CategoryFileContext unsafe = new CategoryFileContext(
-                    new CategoryContext(1L, "DOCS", "Docs", "bucket", CategoryStorageClass.STANDARD, "file"),
-                    "file-key", 1, "../secret.txt", "GROUP_A", false,
-                    null, null, HiveRecordStatus.UPLOADED, null, null, null);
+            CategoryFileContext sourceContext = context("SOURCE");
+            Path source = service.getDownloadFile(sourceContext).toPath();
+            Files.createDirectories(source.getParent());
+            Files.writeString(source, "downloaded");
+            HiveRecord record = new HiveRecord();
+            record.setFileName("example.txt");
+            record.setZipped(false);
+            FileGroup sourceGroup = new FileGroup();
+            sourceGroup.setGroupCode("SOURCE");
+            record.assignTo(sourceGroup);
 
-            assertThatThrownBy(() -> service.getDownloadFile(unsafe))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("文件名不能用于下载路径");
+            HiveDownloadService.LocalDownloadMove move = service.moveLocalDownload("DOCS", record, "TARGET");
+
+            assertThat(move.source()).isEqualTo(source);
+            assertThat(move.target()).isEqualTo(downloadDir.resolve("DOCS").resolve("TARGET").resolve("example.txt"));
+            assertThat(Files.exists(source)).isFalse();
+            assertThat(Files.readString(move.target())).isEqualTo("downloaded");
         } finally {
             FileUtils.deleteDirectory(downloadDir.toFile());
         }

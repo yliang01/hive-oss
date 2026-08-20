@@ -7,5 +7,5 @@ import java.util.List;
 @Data
 public class FileGroupAssignRequest {
     private List<String> fileKeys;
-    private String operator;
+    private String groupCode;
 }

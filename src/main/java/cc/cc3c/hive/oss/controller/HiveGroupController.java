@@ -1,10 +1,8 @@
 package cc.cc3c.hive.oss.controller;
 
-import cc.cc3c.hive.oss.controller.vo.FileGroupAssignRequest;
 import cc.cc3c.hive.oss.controller.vo.FileGroupVO;
 import cc.cc3c.hive.oss.controller.vo.GroupUpsertRequest;
 import cc.cc3c.hive.oss.service.FileGroupService;
-import cc.cc3c.hive.oss.web.CategoryContext;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,11 +41,4 @@ public class HiveGroupController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/{groupCode}/files:assign")
-    public ResponseEntity<Void> assignFilesToGroup(CategoryContext category,
-                                                    @PathVariable("groupCode") String groupCode,
-                                                    @RequestBody FileGroupAssignRequest request) {
-        fileGroupService.assignFiles(category.categoryId(), category.code(), groupCode, request.getFileKeys(), request.getOperator());
-        return ResponseEntity.ok().build();
-    }
 }

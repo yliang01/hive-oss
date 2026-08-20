@@ -17,8 +17,7 @@
 | Vue `files.ts` | `GET /categories/{category}/files:batch-get?fileKeys=...` | axios | `HiveFileController#batchGetFiles` | 保留；操作后批量刷新记录状态 |
 | `files.js` | `POST /categories/{category}/files/download-task/{fileKey}` | fetch | `HiveOssController#downloadTask` | 保留 |
 | `files.js` | `GET /categories/{category}/files/download-task-status/{fileKey}` | fetch | `HiveOssController#downloadTaskStatus` | 保留；仅返回任务状态和进度 |
-| `files.js` | `POST /categories/{category}/groups/{groupId}/files:assign` | fetch | `HiveOssController#assignFilesToGroup` | 保留（主接口） |
-| `files.js` | `POST /categories/{category}/groups/{groupId}/files:move` | fetch | `HiveOssController#moveFilesToGroup` | 冗余，前端改为调用 `assign` |
+| Vue `files.ts` | `POST /categories/{category}/files:assign-group` | axios | `HiveFileGroupController#assignFiles` | 保留；同步全量改组或移至未分组 |
 | Vue `files.ts` | `POST /categories/{category}/files:mark-delete` | axios | `HiveFileController#bulkMarkDelete` | 保留；文件删除统一走选中后批量标记 |
 | `files.js` | `POST /categories/{category}/files/confirm-delete` | fetch | `HiveOssController#syncLocal` | 保留 |
 | `files.js` | `POST /categories/{category}/files/sync-remote` | fetch | `HiveOssController#syncRemote` | 保留 |
@@ -47,20 +46,7 @@
 - `GET /categories/{category}/files/{fileKey}`
   - 已由 `GET /categories/{category}/files:batch-get?fileKeys=...` 替代；前端状态刷新不再逐条查询。
 
-### 1) 高优先级
-
-- `POST /categories/{category}/groups/{groupId}/files:move`
-  - 与 `files:assign` 行为一致，属于语义冗余。
-  - 处理策略：前端统一调用 `files:assign`；后端保留 `files:move` 作为兼容别名并标记 deprecated。
-
-### 1.1 废弃窗口
-
-- `files:move` 进入废弃观察期（建议 2 个发布周期）：
-  - **阶段 1（当前版本）**：保留可用，返回 `X-API-Deprecated` 响应头。
-  - **阶段 2（下一版本）**：仅文档保留迁移说明，不再推荐任何调用方使用。
-  - **阶段 3（观察期后）**：若无外部调用证据，删除后端别名路由。
-
-### 2) 不应判定为死接口
+### 1) 不应判定为死接口
 
 - `GET /categories/{category}/files/preview/{fileKey}`
   - 前端不是通过 `fetch` 调用，而是通过 `previewUrl` 赋值给 `img/iframe src` 间接触发。
@@ -92,6 +78,5 @@
 - 已完成：前后端 API 映射矩阵输出。
 - 已完成：移除下载状态接口中的物理路径字段，保留任务状态和进度。
 - 已完成：按文件系统状态控制本地副本释放和再次下载。
-- 已完成：前端批量操作统一到 `files:assign`。
-- 已完成：`files:move` 标记 deprecated 并纳入废弃窗口。
+- 已完成：前端批量操作统一到 `files:assign-group`；`groupCode: null` 表示移至未分组。
 

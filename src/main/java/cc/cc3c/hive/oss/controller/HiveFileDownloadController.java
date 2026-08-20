@@ -28,14 +28,12 @@ public class HiveFileDownloadController {
     @PostMapping("/categories/{category}/files/download-task/{*fileKey}")
     public ResponseEntity<?> downloadTask(CategoryFileContext context) {
         try {
-            HiveDownloadStatus downloadStatus = hiveDownloadService.reconcileStaleDownloading(context);
             if (hiveDownloadService.isRestoreRequired(context)) {
                 return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of("error", "归档文件尚未解冻"));
             }
-            if (!hiveDownloadService.isDownloadable(context, downloadStatus)) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", downloadBlockedMessage(context, downloadStatus)));
+            if (!hiveDownloadService.download(context)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "文件当前不可下载"));
             }
-            hiveDownloadService.download(context);
         } catch (Exception e) {
             log.error("failed to download {}", context.key(), e);
             return ResponseEntity.internalServerError().body(Map.of("error", "创建下载任务失败"));
@@ -74,16 +72,4 @@ public class HiveFileDownloadController {
         }
     }
 
-    private String downloadBlockedMessage(CategoryFileContext context, HiveDownloadStatus downloadStatus) {
-        if (context.status() != cc.cc3c.hive.domain.model.HiveRecordStatus.UPLOADED) {
-            return "文件当前状态不允许下载";
-        }
-        if (downloadStatus == HiveDownloadStatus.downloading) {
-            return "文件正在下载";
-        }
-        if (hiveDownloadService.isDownloadFileAvailable(context)) {
-            return "本地下载副本已存在，请先释放";
-        }
-        return "文件当前不可下载";
-    }
 }

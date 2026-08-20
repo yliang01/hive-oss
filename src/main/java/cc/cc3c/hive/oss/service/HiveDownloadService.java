@@ -20,12 +20,12 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.LinkOption;
+import java.nio.file.FileSystemException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -61,22 +61,23 @@ public class HiveDownloadService {
     public void init() {
         try {
             Path configuredRoot = Paths.get(downloadDir).toAbsolutePath().normalize();
-            if (Files.exists(configuredRoot, LinkOption.NOFOLLOW_LINKS)
-                    && (Files.isSymbolicLink(configuredRoot)
-                    || !Files.isDirectory(configuredRoot, LinkOption.NOFOLLOW_LINKS))) {
-                throw new IllegalArgumentException("下载根目录不是安全目录: " + configuredRoot);
-            }
             Files.createDirectories(configuredRoot);
-            if (Files.isSymbolicLink(configuredRoot)) {
-                throw new IllegalArgumentException("下载根目录不能是符号链接: " + configuredRoot);
-            }
-            downloadRoot = configuredRoot.toRealPath();
+            downloadRoot = configuredRoot;
         } catch (IOException e) {
             throw new IllegalStateException("无法创建下载根目录: " + downloadDir, e);
         }
     }
 
     private final ConcurrentHashMap<String, HiveOssTask> downloadTasks = new ConcurrentHashMap<>();
+
+    @FunctionalInterface
+    public interface LocalFileOperation<T> {
+        T run() throws Exception;
+    }
+
+    public synchronized <T> T coordinateLocalFileOperation(LocalFileOperation<T> operation) throws Exception {
+        return operation.run();
+    }
 
     public HiveOssTask getDownLoadTask(HiveRecord hiveRecord) {
         return downloadTasks.get(taskMapKey(hiveRecord));
@@ -88,8 +89,8 @@ public class HiveDownloadService {
 
     public boolean isDownloadFileAvailable(CategoryFileContext context) {
         try {
-            return Files.isRegularFile(resolveDownloadFile(context, false), LinkOption.NOFOLLOW_LINKS);
-        } catch (IOException | IllegalArgumentException e) {
+            return Files.isRegularFile(resolveDownloadFile(context, false));
+        } catch (IOException e) {
             return false;
         }
     }
@@ -106,17 +107,9 @@ public class HiveDownloadService {
                 && !isDownloadFileAvailable(context);
     }
 
-    public boolean hasLocalDownloadOrIsDownloading(String categoryCode, HiveRecord record) {
-        if (HiveDownloadStatus.downloading == record.getDownloadStatus()) {
-            return true;
-        }
-        String groupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
-        try {
-            return Files.isRegularFile(resolveDownloadFile(categoryCode, groupCode, record.getZipped(), record.getFileName(), false),
-                    LinkOption.NOFOLLOW_LINKS);
-        } catch (IOException | IllegalArgumentException e) {
-            return false;
-        }
+    public boolean isDownloading(String categoryCode, HiveRecord record) {
+        return HiveDownloadStatus.downloading == record.getDownloadStatus()
+                || downloadTasks.containsKey(categoryCode + ":" + record.getFileKey());
     }
 
     public HiveDownloadStatus reconcileStaleDownloading(CategoryFileContext context) {
@@ -133,23 +126,32 @@ public class HiveDownloadService {
         return context.downloadStatus();
     }
 
-    public void download(CategoryFileContext context) throws Exception {
+    public boolean download(CategoryFileContext context) throws Exception {
+        return coordinateLocalFileOperation(() -> startDownload(context));
+    }
+
+    private boolean startDownload(CategoryFileContext context) throws Exception {
         if (downloadTasks.containsKey(taskMapKey(context))) {
-            return;
+            return false;
         }
-        Path targetFile = resolveDownloadFile(context, true);
-        Path partFile = getDownloadPartFile(context);
+        CategoryFileContext current = currentContext(context);
+        HiveDownloadStatus downloadStatus = reconcileStaleDownloading(current);
+        if (isRestoreRequired(current) || !isDownloadable(current, downloadStatus)) {
+            return false;
+        }
+        Path targetFile = resolveDownloadFile(current, true);
+        Path partFile = getDownloadPartFile(current);
         Files.deleteIfExists(partFile);
-        HiveOssTask task = createOutputTask(context, new FileOutputStream(partFile.toFile()));
+        HiveOssTask task = createOutputTask(current, new FileOutputStream(partFile.toFile()));
         log.info("download start {}", task);
         String taskMapKey = taskMapKey(context);
-        Long categoryId = context.category().categoryId();
+        Long categoryId = current.category().categoryId();
         hiveRecordRepository.updateDownloadStatus(categoryId, task.getKey(), HiveDownloadStatus.downloading);
         downloadTasks.put(taskMapKey, task);
         HiveOssTask finalTask = task;
         Thread.ofVirtual().start(() -> {
             try {
-                hiveOssService.using(context.provider()).download(finalTask);
+                hiveOssService.using(current.provider()).download(finalTask);
                 Files.move(partFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
                 hiveRecordRepository.updateDownloadStatus(categoryId, finalTask.getKey(), HiveDownloadStatus.success);
                 log.info("download finished {}", finalTask);
@@ -161,6 +163,7 @@ public class HiveDownloadService {
                 downloadTasks.remove(taskMapKey);
             }
         });
+        return true;
     }
 
     public long getAvailableDownloadFileSize(CategoryFileContext context) throws IOException {
@@ -203,13 +206,50 @@ public class HiveDownloadService {
     }
 
     public void releaseLocalStatus(CategoryFileContext context) throws IOException {
-        Path downloadFile = resolveDownloadFile(context, false);
-        if (Files.exists(downloadFile, LinkOption.NOFOLLOW_LINKS)
-                && !Files.isRegularFile(downloadFile, LinkOption.NOFOLLOW_LINKS)) {
+        try {
+            coordinateLocalFileOperation(() -> {
+                releaseLocalStatusLocked(context);
+                return null;
+            });
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("无法释放本地文件", e);
+        }
+    }
+
+    private void releaseLocalStatusLocked(CategoryFileContext context) throws IOException {
+        CategoryFileContext current = currentContext(context);
+        if (HiveDownloadStatus.downloading == current.downloadStatus()
+                || downloadTasks.containsKey(taskMapKey(current))) {
+            throw new FileSystemException(current.key(), null, "本地文件正在下载");
+        }
+        Path downloadFile = resolveDownloadFile(current, false);
+        if (Files.exists(downloadFile) && !Files.isRegularFile(downloadFile)) {
             throw new IOException("local download target is not a regular file: " + downloadFile);
         }
         Files.deleteIfExists(downloadFile);
-        hiveRecordRepository.updateDownloadStatus(context.category().categoryId(), context.key(), null);
+        hiveRecordRepository.updateDownloadStatus(current.category().categoryId(), current.key(), null);
+    }
+
+    public LocalDownloadMove moveLocalDownload(String categoryCode, HiveRecord record, String targetGroupCode) throws IOException {
+        String sourceGroupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
+        Path source = resolveDownloadFile(categoryCode, sourceGroupCode, record.getZipped(), record.getFileName(), false);
+        if (!Files.isRegularFile(source)) {
+            return null;
+        }
+        Path target = resolveDownloadFile(categoryCode, targetGroupCode, record.getZipped(), record.getFileName(), true);
+        Files.move(source, target);
+        return new LocalDownloadMove(source, target);
+    }
+
+    public void restoreLocalDownloadMove(LocalDownloadMove move) throws IOException {
+        if (move != null && Files.exists(move.target())) {
+            Files.move(move.target(), move.source());
+        }
+    }
+
+    public record LocalDownloadMove(Path source, Path target) {
     }
 
     private HiveOssTask createOutputTask(CategoryFileContext file, OutputStream outputStream) throws Exception {
@@ -241,7 +281,7 @@ public class HiveDownloadService {
 
     private Path requireAvailableDownloadFile(CategoryFileContext context) throws IOException {
         Path downloadFile = resolveDownloadFile(context, false);
-        if (!Files.isRegularFile(downloadFile, LinkOption.NOFOLLOW_LINKS)) {
+        if (!Files.isRegularFile(downloadFile)) {
             throw new FileNotFoundException("本地下载副本不存在: " + context.key());
         }
         return downloadFile;
@@ -258,56 +298,18 @@ public class HiveDownloadService {
 
     private Path resolveDownloadFile(String categoryCode, String groupCode, Boolean zipped, String fileName,
                                      boolean createDirectories) throws IOException {
-        requireSafePathSegment(categoryCode, "分类编码");
         String resolvedGroupCode = StringUtils.defaultIfBlank(groupCode, UNGROUPED_DIR);
-        requireSafePathSegment(resolvedGroupCode, "分组编码");
-        requireSafePathSegment(fileName, "文件名");
         String resolvedFileName = Boolean.TRUE.equals(zipped) ? fileName + ".zip" : fileName;
-        requireSafePathSegment(resolvedFileName, "下载文件名");
-
-        Path categoryDirectory = managedDirectory(downloadRoot.resolve(categoryCode), createDirectories);
-        Path groupDirectory = managedDirectory(categoryDirectory.resolve(resolvedGroupCode), createDirectories);
-        Path downloadFile = groupDirectory.resolve(resolvedFileName).normalize();
-        if (!downloadFile.startsWith(groupDirectory)) {
-            throw new IllegalArgumentException("下载文件路径超出允许范围: " + fileName);
+        Path groupDirectory = downloadRoot.resolve(categoryCode).resolve(resolvedGroupCode);
+        if (createDirectories) {
+            Files.createDirectories(groupDirectory);
         }
-        if (Files.exists(downloadFile, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(downloadFile)) {
-            throw new IllegalArgumentException("下载文件不能是符号链接: " + downloadFile);
-        }
-        return downloadFile;
+        return groupDirectory.resolve(resolvedFileName);
     }
 
-    private Path managedDirectory(Path directory, boolean createDirectories) throws IOException {
-        Path normalized = directory.normalize();
-        if (!normalized.startsWith(downloadRoot)) {
-            throw new IllegalArgumentException("下载目录超出允许范围: " + directory);
-        }
-        if (!Files.exists(normalized, LinkOption.NOFOLLOW_LINKS) && createDirectories) {
-            Files.createDirectory(normalized);
-        }
-        if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            if (Files.isSymbolicLink(normalized) || !Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) {
-                throw new IllegalArgumentException("下载目录不是安全目录: " + normalized);
-            }
-            Path realPath = normalized.toRealPath();
-            if (!realPath.startsWith(downloadRoot)) {
-                throw new IllegalArgumentException("下载目录超出允许范围: " + normalized);
-            }
-        }
-        return normalized;
-    }
-
-    private void requireSafePathSegment(String value, String label) {
-        if (value == null || value.isBlank() || ".".equals(value) || "..".equals(value)) {
-            throw new IllegalArgumentException(label + "不能用于下载路径: " + value);
-        }
-        try {
-            Path path = Paths.get(value);
-            if (path.isAbsolute() || path.getNameCount() != 1 || !value.equals(path.getFileName().toString())) {
-                throw new IllegalArgumentException(label + "不能用于下载路径: " + value);
-            }
-        } catch (InvalidPathException e) {
-            throw new IllegalArgumentException(label + "不能用于下载路径: " + value, e);
-        }
+    private CategoryFileContext currentContext(CategoryFileContext context) {
+        List<HiveRecord> records = hiveRecordRepository
+                .findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(context.category().categoryId(), List.of(context.key()));
+        return records.isEmpty() ? context : CategoryFileContext.from(context.category(), records.getFirst());
     }
 }

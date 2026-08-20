@@ -13,7 +13,9 @@ import jakarta.transaction.Transactional;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -41,26 +43,22 @@ public class FileGroupService {
     }
 
     @Transactional
-    public void assignFiles(Long categoryId, String categoryCode, String groupCode, List<String> fileKeys, String operator) {
-        if (fileKeys == null || fileKeys.isEmpty()) {
-            return;
-        }
-        FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
-                .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
+    public void assignFiles(Long categoryId, String categoryCode, String groupCode, List<String> fileKeys) {
         List<String> normalizedKeys = FileKeyNormalizer.normalizeDistinct(fileKeys);
         if (normalizedKeys.isEmpty()) {
-            return;
+            throw new IllegalArgumentException("fileKeys are required");
         }
+        FileGroup group = StringUtils.isBlank(groupCode) ? null : fileGroupRepository
+                .findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
+                .orElseThrow(() -> new IllegalArgumentException("group not found in category"));
         List<HiveRecord> records = hiveRecordRepository.findWithGroupByCategory_IdAndFileKeyInAndDeletedIsFalse(categoryId, normalizedKeys);
-        if (records.isEmpty()) {
-            return;
+        if (records.size() != normalizedKeys.size()) {
+            throw new IllegalArgumentException("some files were not found in category");
         }
         List<HiveRecord> changedRecords = records.stream()
-                .filter(record -> record.getGroup() == null || !Objects.equals(record.getGroup().getId(), group.getId()))
+                .filter(record -> !sameGroup(record.getGroup(), group))
                 .toList();
-        ensureGroupCanChange(categoryCode, changedRecords, "存在本地副本或下载中的文件，无法调整分组");
-        records.forEach(record -> record.assignTo(group));
-        hiveRecordRepository.saveAll(records);
+        moveAndAssign(categoryCode, changedRecords, group, "存在下载中的文件，无法调整分组", null);
     }
 
     @Transactional
@@ -103,11 +101,10 @@ public class FileGroupService {
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
         List<HiveRecord> records = hiveRecordRepository.findByGroup_Id(group.getId());
-        ensureGroupCanChange(categoryCode, records, "分组中存在本地副本或下载中的文件，无法删除分组");
-        records.forEach(HiveRecord::clearGroup);
-        hiveRecordRepository.saveAll(records);
-        hiveRecordRepository.flush();
-        fileGroupRepository.delete(group);
+        moveAndAssign(categoryCode, records, null, "分组中存在下载中的文件，无法删除分组", () -> {
+            fileGroupRepository.delete(group);
+            fileGroupRepository.flush();
+        });
     }
 
     private FileGroupVO toGroupVO(FileGroup group) {
@@ -119,9 +116,62 @@ public class FileGroupService {
                 .build();
     }
 
-    private void ensureGroupCanChange(String categoryCode, List<HiveRecord> records, String message) {
-        if (records.stream().anyMatch(record -> hiveDownloadService.hasLocalDownloadOrIsDownloading(categoryCode, record))) {
+    private void moveAndAssign(String categoryCode, List<HiveRecord> records, FileGroup targetGroup,
+                               String downloadingMessage, Runnable afterAssignment) {
+        try {
+            hiveDownloadService.coordinateLocalFileOperation(() -> {
+                ensureNotDownloading(categoryCode, records, downloadingMessage);
+                List<HiveDownloadService.LocalDownloadMove> moves = new ArrayList<>();
+                try {
+                    String targetGroupCode = targetGroup == null ? null : targetGroup.getGroupCode();
+                    for (HiveRecord record : records) {
+                        HiveDownloadService.LocalDownloadMove move = hiveDownloadService.moveLocalDownload(categoryCode, record, targetGroupCode);
+                        if (move != null) {
+                            moves.add(move);
+                        }
+                    }
+                    records.forEach(record -> {
+                        if (targetGroup == null) {
+                            record.clearGroup();
+                        } else {
+                            record.assignTo(targetGroup);
+                        }
+                    });
+                    hiveRecordRepository.saveAll(records);
+                    hiveRecordRepository.flush();
+                    if (afterAssignment != null) {
+                        afterAssignment.run();
+                    }
+                    return null;
+                } catch (Exception e) {
+                    restoreMoves(moves, e);
+                    throw e;
+                }
+            });
+        } catch (LocalDownloadGroupConflictException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("移动本地文件并调整分组失败", e);
+        }
+    }
+
+    private void ensureNotDownloading(String categoryCode, List<HiveRecord> records, String message) {
+        if (records.stream().anyMatch(record -> hiveDownloadService.isDownloading(categoryCode, record))) {
             throw new LocalDownloadGroupConflictException(message);
         }
+    }
+
+    private void restoreMoves(List<HiveDownloadService.LocalDownloadMove> moves, Exception cause) {
+        for (int index = moves.size() - 1; index >= 0; index--) {
+            try {
+                hiveDownloadService.restoreLocalDownloadMove(moves.get(index));
+            } catch (IOException rollbackFailure) {
+                cause.addSuppressed(rollbackFailure);
+            }
+        }
+    }
+
+    private boolean sameGroup(FileGroup first, FileGroup second) {
+        return first == second || first != null && second != null && Objects.equals(first.getId(), second.getId());
     }
 }

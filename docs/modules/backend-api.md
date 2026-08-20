@@ -31,8 +31,7 @@
 | 解冻状态 | GET | `/categories/{category}/files/unfreeze-status/{fileKey}` |
 | 创建下载任务 | POST | `/categories/{category}/files/download-task/{fileKey}` |
 | 下载任务状态 | GET | `/categories/{category}/files/download-task-status/{fileKey}` |
-| 分组分配（主） | POST | `/categories/{category}/groups/{groupId}/files:assign` |
-| 分组迁移（兼容别名，Deprecated） | POST | `/categories/{category}/groups/{groupId}/files:move` |
+| 批量分配或解除分组 | POST | `/categories/{category}/files:assign-group` |
 | 释放本地文件 | POST | `/categories/{category}/files/release-local/{fileKey}` |
 | 确认删除 | POST | `/categories/{category}/files/confirm-delete` |
 | 远程同步 | POST | `/categories/{category}/files/sync-remote` |
@@ -54,7 +53,7 @@
 
 创建任务前会修正过期的 `downloading` 状态：若内存任务已不存在，服务端删除遗留 `.part` 文件、将 DB 状态更新为 `failed`，并在当前请求继续创建新任务。任务启动后状态为 `downloading`，成功落盘后为 `success`，失败后为 `failed`。释放本地文件只删除常规文件并清空下载状态；下载中释放仍返回 `409 Conflict`。
 
-下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织。存在下载副本或下载中的文件不能调整分组；存在此类文件的分组不能删除，均返回 `409 Conflict`。
+下载副本路径按 `hive.downloadDir/{categoryCode}/{groupCode 或 _ungrouped}/{fileName}[.zip]` 组织，文件名在项目内全局唯一。`POST /categories/{category}/files:assign-group` 接收 `{ "fileKeys": [...], "groupCode": "GROUP" }`；`groupCode: null` 表示移至未分组。批量请求必须全部命中当前分类的未删除记录，否则整体返回 `400 Bad Request` 并不做任何变更。已下载副本会在同一请求内移动到目标目录；任一移动或写库失败时整体回滚。下载中的任一文件会使改组或删除分组整体返回 `409 Conflict`；本地副本本身不再阻止改组。
 
 文件列表与批量详情会即时检查 `hive.downloadDir` 中当前返回记录的下载副本，并将副本大小和 `original_size` 比较。`localCheckStatus` 与 `localCheckObservedSize` 仅存在于响应中；大小变化的副本可通过重新上传接口覆盖 OSS，并以当前大小更新 `original_size` 基线。
 

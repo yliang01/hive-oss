@@ -25,7 +25,7 @@
 |----|------|
 | `HiveOssService` | 按 `HiveStorageProvider` 返回对应 `HiveOss` Bean（如 `alibabaOss`、`tencentOss`），供上传/下载/同步/删除使用 |
 | `HiveUploadService` | 同步上传 `uploadSync` 与流式上传 `uploadStreaming`（bucket 由 category 决定）；写库并可选生成缩略图 |
-| `HiveDownloadService` | 初始化并安全解析受管下载目录；集中判断下载资格（`UPLOADED`、已解冻、非下载中、无副本）；按分类和分组落盘并异步执行下载，提供本地主预览、任务进度查询与本地副本释放 |
+| `HiveDownloadService` | 初始化受管下载目录；集中判断下载资格（`UPLOADED`、已解冻、非下载中、无副本）；按分类和分组落盘并异步执行下载，提供本地主预览、任务进度查询、本地副本释放和改组时的同步移动 |
 | `HiveLocalCheckService` | 在文件列表、批量刷新和重新上传前检查受管下载副本大小是否与 `original_size` 一致；检查结果不写入数据库 |
 | `HiveSyncService` | 按 category 解析 bucket 后拉取 OSS 对象列表，与 DB 中的 `HiveRecord` 比对，更新状态（如 OSS_ONLY、DB_ONLY、匹配数等）并返回统计 VO |
 
