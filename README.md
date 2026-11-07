@@ -1,72 +1,35 @@
-# hive-oss 模块总览
+# Hive OSS
 
-本目录为 hive-oss 项目的功能模块说明，采用「总览 + 分模块」文档结构，覆盖模块职责、依赖关系与启动入口。
+`hive-oss` 是 Hive 的对象存储管理与数据库备份应用。它以 Spring Boot 提供后端服务，并内置 Vue 3 管理界面，可统一管理阿里云 OSS 与腾讯云 COS 中的文件。
 
-## 项目概览
+## 功能概览
 
-hive-oss 是单 Maven 模块的 Spring Boot 应用，提供多云 OSS（阿里云、腾讯云）的统一管理：文件列表/搜索、上传、下载、解冻、删除及与本地 DB 的同步；并集成数据库备份与恢复（db2oss）。在该集成中，hive-oss 负责业务编排与 OSS 上传/下载，db2oss Starter 负责本地 MySQL 备份与恢复核心流程。
+- 按分类和分组浏览、搜索文件，并执行上传、下载、解冻、删除和远端同步。
+- 管理分类与分组，并将文件记录同步到本地数据库。
+- 编排 MySQL 数据库备份与恢复：`hive-oss` 负责业务流程及 OSS 文件流转，`db2oss` starter 负责本地备份和恢复过程。
+- 通过管理界面加载或解锁秘密配置；业务服务仅在配置解锁后启动。
+- 可选地发布程序包和加密配置，并为新安装签发配置下载 ticket。
 
-## 模块关系图
+## 应用结构
+
+应用先启动管理容器，提供静态前端和 `/setup` 配置接口。解锁配置后，管理器再创建独立的业务 Web 容器；业务 API 使用 `/api` 前缀。两个容器共用 HTTP 端口，各自管理 Spring MVC 和 Controller。
 
 ```mermaid
 flowchart LR
-  setupApp[HiveOssApplication] --> manager[BusinessContextManager]
-  manager --> businessContext[BusinessContextConfiguration]
-  businessContext --> apiController[Business Controllers]
-  apiController --> serviceLayer[ServiceLayer]
-  serviceLayer --> ossFacade[HiveOssService]
-  ossFacade --> vendorImpl[HiveOssImpl]
-  vendorImpl --> alibabaClient[AlibabaOssClient]
-  vendorImpl --> tencentClient[TencentOssClient]
-  serviceLayer --> recordRepo[HiveRecordRepository]
-  staticUi[StaticFrontend] --> apiController
+  UI[Vue 3 管理界面] --> Setup[管理容器 /setup]
+  Setup -->|解锁配置| Business[业务容器 /api]
+  Business --> Services[文件与备份服务]
+  Services --> OSS[阿里云 OSS / 腾讯云 COS]
+  Services --> DB[本地数据库与 db2oss]
+  Business --> Release[程序发布与配置分发]
 ```
 
-## 启动入口
+主入口为 `cc.cc3c.hive.oss.setup.HiveOssApplication`。Java 代码位于 `src/main/java/cc/cc3c/hive/oss/`：`setup` 管理启动与配置，`runtime` 注册业务容器，`business` 提供业务接口和服务。前端源码由 `hive-oss-frontend` 模块维护。如需功能、接口或前端页面的详细说明，请查看 [`docs/`](docs/) 下的文档，例如 [后端 API](docs/backend-api.md)、[服务编排](docs/service-orchestration.md) 和[静态前端](docs/static-frontend.md)。
 
-| 类型 | 入口 | 说明 |
-|------|------|------|
-| 应用主入口 | `cc.cc3c.hive.oss.setup.HiveOssApplication` | Spring Boot `main`，先启动管理 Web，解锁后启动业务与调度 |
-| HTTP API | `cc.cc3c.hive.oss.business.controller` | 业务 REST 接口，供静态前端调用，详见 [静态前端](static-frontend.md) |
+## 运行与发布
 
-## 模块导航
+开发和运行环境需要 Java 21。可从 IDEA 运行主入口进行本地开发；源码仓库根目录的 `package-release.cmd` 会构建并组装 Windows/Linux 安装目录。解压后，在 Windows 运行 `start.cmd`，在 Linux/macOS 运行 `sh start.sh`，再访问 `http://localhost:8080/#/setup`。本地开发可在配置页选择秘密 YAML；正常安装可粘贴发布 ticket 下载加密配置并输入密码解锁。ticket 与配置包密码应分开传递。
 
-| 模块 | 文档 | 职责摘要 |
-|------|------|----------|
-| 后端 API | [backend-api.md](backend-api.md) | REST 接口、请求/响应 VO、与前端对接 |
-| 服务编排 | [service-orchestration.md](service-orchestration.md) | 上传/下载/同步服务与 OSS 门面、配置与调度 |
-| OSS 适配层 | [oss-adapter.md](oss-adapter.md) | 阿里云/腾讯云客户端、统一 HiveOss 接口与实现 |
-| 同步与监控 | [sync-and-watcher.md](sync-and-watcher.md) | 远程同步触发 |
-| 静态前端 | [static-frontend.md](static-frontend.md) | 首页、分类/分组、文件管理页面与 API 调用 |
+管理和业务接口共用一个 HTTP 端口：管理接口在 `/setup`，业务接口以 `/api` 开头。业务配置成功解锁后才会启动；更新配置需重启程序。发布程序需要在业务已启动后通过 `/#/admin/release` 操作，并配置 `hive.release` 发布目标及本机阿里云 CLI operator profile。发布程序目录、上传产物和配置下载位于当前工作目录下的 `.release/`。
 
-## db2oss 集成说明（AutoConfiguration）
-
-### 自动装配行为
-
-- `mysql-backup-spring-boot-starter` 默认注册三个核心 Bean：`BackupProperties`、`BackupService`、`RestoreService`。
-- 三个 Bean 均基于 `@ConditionalOnMissingBean` 创建，hive-oss 可按需提供同类型 Bean 覆盖默认实现。
-- `BackupProperties` 由 `backup.*` 直接绑定生成，避免业务侧手工拼装配置对象。
-
-### 配置入口与分组
-
-- 统一配置前缀：`backup.*`
-- 关键分组：
-  - `backup.mysql`：连接目标库、客户端目录、锁表策略等备份基础参数
-  - `backup.restore`：恢复输入文件、是否重建库、恢复临时目录
-  - `backup.retention`：本地保留策略（如保留天数）
-  - `backup.dir`：备份产物输出目录
-  - `backup.security`：异常场景下的清理策略（如失败后删除中间产物）
-
-### 职责边界（hive-oss vs db2oss）
-
-- hive-oss：按业务流程触发备份/恢复、接入加密能力、将产物上传到 OSS、按需从 OSS 下载后恢复。
-- db2oss Starter：提供 dump/gzip/manifest 等本地备份产物生成能力，以及恢复执行能力。
-- 通过上述边界，hive-oss 关注“编排与存储流转”，db2oss 关注“备份与恢复引擎”。
-
-## 外部依赖（高层）
-
-- **hive-domain**：实体 `HiveRecord`、枚举 `HiveStorageProvider`/`HiveRecordStatus`/`HiveDownloadStatus`、仓储 `HiveRecordRepository`
-- **hive-encryption-starter**：加密配置与加解密能力（上传/下载时可选）
-- **mysql-backup-spring-boot-starter**（db2oss）：通过 AutoConfiguration 提供 `BackupProperties`、`BackupService`、`RestoreService`，以 `backup.*` 作为统一配置入口，供 hive-oss 编排调用
-- **Spring Boot**：Web、Validation、JPA、配置
-- **阿里云 OSS SDK**、**腾讯云 COS SDK**：对象存储操作
+秘密 YAML 不随程序包分发。升级时先停止旧程序，保留 `data/` 和 `config/`，再替换程序 JAR 与启动脚本。发布输入目录会原样打包，请勿将凭据、秘密配置、业务数据或日志放入其中。更多功能、接口及页面细节请查看 [`docs/`](docs/) 下的文档。
