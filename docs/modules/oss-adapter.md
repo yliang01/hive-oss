@@ -39,19 +39,19 @@
 
 ## 相关文件
 
-- `src/main/java/cc/cc3c/hive/oss/vendor/HiveOss.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/HiveOssImpl.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/HiveOssConfiguration.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/DownloadProgressListener.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/vo/HiveOssTask.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/vo/HiveRestoreResult.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/HiveOssClient.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/alibaba/AlibabaOssClient.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/alibaba/AlibabaOssConfig.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/tencent/TencentOssClient.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/tencent/TencentOssConfig.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/vo/HiveOssObject.java`
-- `src/main/java/cc/cc3c/hive/oss/vendor/client/vo/HiveOssPartUploadResult.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/HiveOss.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/HiveOssImpl.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/HiveOssConfiguration.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/DownloadProgressListener.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/vo/HiveOssTask.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/vo/HiveRestoreResult.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/HiveOssClient.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/alibaba/AlibabaOssClient.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/alibaba/AlibabaOssConfig.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/tencent/TencentOssClient.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/tencent/TencentOssConfig.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/vo/HiveOssObject.java`
+- `src/main/java/cc/cc3c/hive/oss/business/vendor/client/vo/HiveOssPartUploadResult.java`
 
 ---
 

@@ -7,3 +7,5 @@ target/
 
 *.yaml
 *.yml
+!src/distribution/config/*.yml.example
+

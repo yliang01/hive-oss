@@ -10,7 +10,9 @@ hive-oss 是单 Maven 模块的 Spring Boot 应用，提供多云 OSS（阿里�
 
 ```mermaid
 flowchart LR
-  mainApp[HiveOssApplication] --> apiController[HiveOssController]
+  setupApp[HiveOssApplication] --> manager[BusinessContextManager]
+  manager --> businessContext[BusinessContextConfiguration]
+  businessContext --> apiController[Business Controllers]
   apiController --> serviceLayer[ServiceLayer]
   serviceLayer --> ossFacade[HiveOssService]
   ossFacade --> vendorImpl[HiveOssImpl]
@@ -24,8 +26,8 @@ flowchart LR
 
 | 类型 | 入口 | 说明 |
 |------|------|------|
-| 应用主入口 | `cc.cc3c.hive.oss.HiveOssApplication` | Spring Boot `main`，启动 Web 与调度 |
-| HTTP API | `cc.cc3c.hive.oss.controller.HiveOssController` | REST 接口，供静态前端调用，详见 [静态前端](static-frontend.md) |
+| 应用主入口 | `cc.cc3c.hive.oss.setup.HiveOssApplication` | Spring Boot `main`，先启动管理 Web，解锁后启动业务与调度 |
+| HTTP API | `cc.cc3c.hive.oss.business.controller` | 业务 REST 接口，供静态前端调用，详见 [静态前端](static-frontend.md) |
 
 ## 模块导航
 

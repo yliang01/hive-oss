@@ -6,12 +6,18 @@
         <artifactId>external-bom</artifactId>
         <groupId>yliang</groupId>
         <version>1.0</version>
+        <relativePath>../external-bom/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>hive-oss</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>yliang</groupId>
+            <artifactId>hive-release</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -106,6 +112,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions><execution><goals><goal>build-info</goal></goals></execution></executions>
             </plugin>
         </plugins>
     </build>

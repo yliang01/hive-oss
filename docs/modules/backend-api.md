@@ -11,7 +11,7 @@
 
 ## 关键依赖
 
-- **内部**：`HiveOssService`、`HiveUploadService`、`HiveDownloadService`、`HiveSyncService`、`HiveRecordRepository`；VO 位于 `cc.cc3c.hive.oss.controller.vo`（如 `HiveRecordVO`、`HiveRecordsVO`、`HiveUploadVO`、`HiveSyncVO`、`HiveDownloadStatusVO`）。
+- **内部**：`HiveOssService`、`HiveUploadService`、`HiveDownloadService`、`HiveSyncService`、`HiveRecordRepository`；VO 位于 `cc.cc3c.hive.oss.business.controller.vo`（如 `HiveRecordVO`、`HiveRecordsVO`、`HiveUploadVO`、`HiveSyncVO`、`HiveDownloadStatusVO`）。
 - **外部**：`hive-domain`（`HiveRecord`、`HiveStorageProvider`、`HiveRecordStatus`、`HiveDownloadStatus`、`HiveRecordRepository`）；Spring Web、Validation、Commons FileUpload2（multipart 上传）。
 
 ## 上下游关系
@@ -71,11 +71,11 @@
 
 ## 相关文件
 
-- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileController.java`
-- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileArchiveController.java`
-- `src/main/java/cc/cc3c/hive/oss/controller/HiveFileDownloadController.java`
-- `src/main/java/cc/cc3c/hive/oss/controller/vo/*.java`
-- `src/main/java/cc/cc3c/hive/oss/config/HiveOssWebConfig.java`（CORS 等 Web 配置）
+- `src/main/java/cc/cc3c/hive/oss/business/controller/HiveFileController.java`
+- `src/main/java/cc/cc3c/hive/oss/business/controller/HiveFileArchiveController.java`
+- `src/main/java/cc/cc3c/hive/oss/business/controller/HiveFileDownloadController.java`
+- `src/main/java/cc/cc3c/hive/oss/business/controller/vo/*.java`
+- `src/main/java/cc/cc3c/hive/oss/business/config/HiveOssWebConfig.java`（CORS 等 Web 配置）
 
 ---
 

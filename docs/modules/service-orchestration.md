@@ -11,7 +11,7 @@
 
 ## 关键依赖
 
-- **内部**：`cc.cc3c.hive.oss.vendor.HiveOss`（由 `HiveOssService` 选择具体 Bean）、`HiveOssTask`、`HiveOssObject` 等 vendor 包类型。
+- **内部**：`cc.cc3c.hive.oss.business.vendor.HiveOss`（由 `HiveOssService` 选择具体 Bean）、`HiveOssTask`、`HiveOssObject` 等 vendor 包类型。
 - **外部**：`hive-domain`（`HiveRecord`、`HiveRecordRepository`、`HiveStorageProvider`、`HiveRecordStatus`、`HiveDownloadStatus`）；Spring 容器、Commons IO（目录创建）、Commons Codec（MD5 生成 fileKey）。
 
 ## 上下游关系
@@ -42,12 +42,12 @@
 
 ## 相关文件
 
-- `src/main/java/cc/cc3c/hive/oss/service/HiveOssService.java`
-- `src/main/java/cc/cc3c/hive/oss/service/HiveUploadService.java`
-- `src/main/java/cc/cc3c/hive/oss/service/HiveDownloadService.java`
-- `src/main/java/cc/cc3c/hive/oss/service/HiveSyncService.java`
-- `src/main/java/cc/cc3c/hive/oss/config/HiveOssConfig.java`
-- `src/main/java/cc/cc3c/hive/oss/config/HiveOssWebConfig.java`
+- `src/main/java/cc/cc3c/hive/oss/business/service/HiveOssService.java`
+- `src/main/java/cc/cc3c/hive/oss/business/service/HiveUploadService.java`
+- `src/main/java/cc/cc3c/hive/oss/business/service/HiveDownloadService.java`
+- `src/main/java/cc/cc3c/hive/oss/business/service/HiveSyncService.java`
+- `src/main/java/cc/cc3c/hive/oss/business/config/HiveOssConfig.java`
+- `src/main/java/cc/cc3c/hive/oss/business/config/HiveOssWebConfig.java`
 
 ---
 
