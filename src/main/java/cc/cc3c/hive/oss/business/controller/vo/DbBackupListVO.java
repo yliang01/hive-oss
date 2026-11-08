@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.business.controller.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,6 +19,7 @@ public class DbBackupListVO {
         private String batchId;
         private String database;
         private String status;
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
         private Instant createdAt;
     }
 }

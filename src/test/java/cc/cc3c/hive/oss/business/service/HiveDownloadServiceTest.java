@@ -36,7 +36,7 @@ class HiveDownloadServiceTest {
             Path target = service.getDownloadFile(context).toPath();
 
             assertThat(service.isDownloadFileAvailable(context)).isFalse();
-            assertThat(target).isEqualTo(downloadDir.resolve("DOCS").resolve("GROUP_A").resolve("example.txt"));
+            assertThat(target).isEqualTo(downloadDir.resolve("Docs").resolve("Group A").resolve("example.txt"));
             Files.createDirectories(target.getParent());
             Files.writeString(target, "downloaded");
 
@@ -81,7 +81,7 @@ class HiveDownloadServiceTest {
             CategoryFileContext context = context(null);
 
             assertThat(service.getDownloadFile(context).toPath())
-                    .isEqualTo(downloadDir.resolve("DOCS").resolve("_ungrouped").resolve("example.txt"));
+                    .isEqualTo(downloadDir.resolve("Docs").resolve("_ungrouped").resolve("example.txt"));
         } finally {
             FileUtils.deleteDirectory(downloadDir.toFile());
         }
@@ -163,7 +163,7 @@ class HiveDownloadServiceTest {
         Path downloadDir = Files.createTempDirectory("hive-download-test");
         try {
             HiveDownloadService service = service(mock(HiveRecordRepository.class), downloadDir);
-            CategoryFileContext sourceContext = context("SOURCE");
+            CategoryFileContext sourceContext = context("Source");
             Path source = service.getDownloadFile(sourceContext).toPath();
             Files.createDirectories(source.getParent());
             Files.writeString(source, "downloaded");
@@ -171,13 +171,13 @@ class HiveDownloadServiceTest {
             record.setFileName("example.txt");
             record.setZipped(false);
             FileGroup sourceGroup = new FileGroup();
-            sourceGroup.setGroupCode("SOURCE");
+            sourceGroup.setGroupName("Source");
             record.assignTo(sourceGroup);
 
-            HiveDownloadService.LocalDownloadMove move = service.moveLocalDownload("DOCS", record, "TARGET");
+            HiveDownloadService.LocalDownloadMove move = service.moveLocalDownload("Docs", record, "Target");
 
             assertThat(move.source()).isEqualTo(source);
-            assertThat(move.target()).isEqualTo(downloadDir.resolve("DOCS").resolve("TARGET").resolve("example.txt"));
+            assertThat(move.target()).isEqualTo(downloadDir.resolve("Docs").resolve("Target").resolve("example.txt"));
             assertThat(Files.exists(source)).isFalse();
             assertThat(Files.readString(move.target())).isEqualTo("downloaded");
         } finally {
@@ -197,22 +197,22 @@ class HiveDownloadServiceTest {
     }
 
     private CategoryFileContext context() {
-        return context("GROUP_A");
+        return context("Group A");
     }
 
-    private CategoryFileContext context(String groupCode) {
-        return context(HiveRecordStatus.UPLOADED, CategoryStorageClass.STANDARD, null, groupCode);
+    private CategoryFileContext context(String groupName) {
+        return context(HiveRecordStatus.UPLOADED, CategoryStorageClass.STANDARD, null, groupName);
     }
 
     private CategoryFileContext context(HiveRecordStatus recordStatus, CategoryStorageClass storageClass,
                                         HiveDownloadStatus downloadStatus) {
-        return context(recordStatus, storageClass, downloadStatus, "GROUP_A");
+        return context(recordStatus, storageClass, downloadStatus, "Group A");
     }
 
     private CategoryFileContext context(HiveRecordStatus recordStatus, CategoryStorageClass storageClass,
-                                        HiveDownloadStatus downloadStatus, String groupCode) {
+                                        HiveDownloadStatus downloadStatus, String groupName) {
         CategoryContext category = new CategoryContext(1L, "DOCS", "Docs", "bucket", storageClass, "file");
-        return new CategoryFileContext(category, "file-key", 1, "example.txt", groupCode, false,
+        return new CategoryFileContext(category, "file-key", 1, "example.txt", groupName, false,
                 null, null, recordStatus, null, null, downloadStatus);
     }
 }

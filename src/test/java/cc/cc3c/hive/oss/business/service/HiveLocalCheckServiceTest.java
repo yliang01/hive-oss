@@ -31,7 +31,7 @@ class HiveLocalCheckServiceTest {
             CategoryContext category = new CategoryContext(1L, "DOCS", "Docs", "bucket", CategoryStorageClass.STANDARD, "file");
             HiveRecord record = record(4L);
             Path localFile = downloadService.getDownloadFile(
-                    new cc.cc3c.hive.oss.business.web.CategoryFileContext(category, "file-key", 1, "example.txt", "GROUP_A", false,
+                    new cc.cc3c.hive.oss.business.web.CategoryFileContext(category, "file-key", 1, "example.txt", "Group A", false,
                             null, null, HiveRecordStatus.UPLOADED, null, null, null)).toPath();
             Files.createDirectories(localFile.getParent());
             Files.writeString(localFile, "changed");
@@ -49,6 +49,7 @@ class HiveLocalCheckServiceTest {
     private HiveRecord record(long originalSize) {
         FileGroup group = new FileGroup();
         group.setGroupCode("GROUP_A");
+        group.setGroupName("Group A");
         HiveRecord record = new HiveRecord();
         record.setId(1);
         record.setFileKey("file-key");

@@ -22,6 +22,8 @@ import java.util.Objects;
 
 @Service
 public class FileGroupService {
+    private static final String UNGROUPED_DIR = "_ungrouped";
+
     private final FileGroupRepository fileGroupRepository;
     private final HiveRecordRepository hiveRecordRepository;
     private final FileCategoryService fileCategoryService;
@@ -58,7 +60,9 @@ public class FileGroupService {
         List<HiveRecord> changedRecords = records.stream()
                 .filter(record -> !sameGroup(record.getGroup(), group))
                 .toList();
-        moveAndAssign(categoryCode, changedRecords, group, "存在下载中的文件，无法调整分组", null);
+        String categoryName = StringUtils.defaultIfBlank(fileCategoryService.nameByCode(categoryCode), categoryCode);
+        moveAndAssign(categoryCode, categoryName, changedRecords, group,
+                "存在下载中的文件，无法调整分组", null);
     }
 
     @Transactional
@@ -66,14 +70,22 @@ public class FileGroupService {
         if (StringUtils.isBlank(request.getGroupCode()) || StringUtils.isBlank(request.getGroupName())) {
             throw new IllegalArgumentException("groupCode and groupName are required");
         }
+        String groupName = request.getGroupName().trim();
+        if (UNGROUPED_DIR.equalsIgnoreCase(groupName)) {
+            throw new IllegalArgumentException("groupName is reserved");
+        }
         if (fileGroupRepository.existsByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, request.getGroupCode())) {
             throw new IllegalArgumentException("group code exists in category");
         }
         FileCategoryEntity category = fileCategoryService.resolveCategory(categoryCode);
+        if (fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).stream()
+                .anyMatch(existing -> existing.getGroupName() != null && existing.getGroupName().equalsIgnoreCase(groupName))) {
+            throw new IllegalArgumentException("group name exists in category");
+        }
         FileGroup group = new FileGroup();
         group.setCategory(category);
         group.setGroupCode(request.getGroupCode().trim().toUpperCase(Locale.ROOT));
-        group.setGroupName(request.getGroupName().trim());
+        group.setGroupName(groupName);
         group.setSortOrder(request.getSortOrder() == null ? 0 : request.getSortOrder());
         group.setCreatedAt(LocalDateTime.now());
         group.setUpdatedAt(LocalDateTime.now());
@@ -87,10 +99,19 @@ public class FileGroupService {
         if (StringUtils.isBlank(request.getGroupName())) {
             throw new IllegalArgumentException("groupName is required");
         }
+        String groupName = request.getGroupName().trim();
+        if (UNGROUPED_DIR.equalsIgnoreCase(groupName)) {
+            throw new IllegalArgumentException("groupName is reserved");
+        }
+        if (fileGroupRepository.findByCategory_CodeOrderBySortOrderAscIdAsc(categoryCode).stream()
+                .anyMatch(existing -> !existing.getId().equals(group.getId())
+                        && existing.getGroupName() != null && existing.getGroupName().equalsIgnoreCase(groupName))) {
+            throw new IllegalArgumentException("group name exists in category");
+        }
         if (request.getSortOrder() == null) {
             throw new IllegalArgumentException("sortOrder is required");
         }
-        group.setGroupName(request.getGroupName().trim());
+        group.setGroupName(groupName);
         group.setSortOrder(request.getSortOrder());
         group.setUpdatedAt(LocalDateTime.now());
         return toGroupVO(fileGroupRepository.save(group));
@@ -101,7 +122,9 @@ public class FileGroupService {
         FileGroup group = fileGroupRepository.findByCategory_CodeAndGroupCodeIgnoreCase(categoryCode, groupCode)
                 .orElseThrow(() -> new IllegalArgumentException("group not found"));
         List<HiveRecord> records = hiveRecordRepository.findByGroup_Id(group.getId());
-        moveAndAssign(categoryCode, records, null, "分组中存在下载中的文件，无法删除分组", () -> {
+        String categoryName = StringUtils.defaultIfBlank(fileCategoryService.nameByCode(categoryCode), categoryCode);
+        moveAndAssign(categoryCode, categoryName, records, null,
+                "分组中存在下载中的文件，无法删除分组", () -> {
             fileGroupRepository.delete(group);
             fileGroupRepository.flush();
         });
@@ -116,16 +139,16 @@ public class FileGroupService {
                 .build();
     }
 
-    private void moveAndAssign(String categoryCode, List<HiveRecord> records, FileGroup targetGroup,
+    private void moveAndAssign(String categoryCode, String categoryName, List<HiveRecord> records, FileGroup targetGroup,
                                String downloadingMessage, Runnable afterAssignment) {
         try {
             hiveDownloadService.coordinateLocalFileOperation(() -> {
                 ensureNotDownloading(categoryCode, records, downloadingMessage);
                 List<HiveDownloadService.LocalDownloadMove> moves = new ArrayList<>();
                 try {
-                    String targetGroupCode = targetGroup == null ? null : targetGroup.getGroupCode();
+                    String targetGroupName = targetGroup == null ? null : targetGroup.getGroupName();
                     for (HiveRecord record : records) {
-                        HiveDownloadService.LocalDownloadMove move = hiveDownloadService.moveLocalDownload(categoryCode, record, targetGroupCode);
+                        HiveDownloadService.LocalDownloadMove move = hiveDownloadService.moveLocalDownload(categoryName, record, targetGroupName);
                         if (move != null) {
                             moves.add(move);
                         }

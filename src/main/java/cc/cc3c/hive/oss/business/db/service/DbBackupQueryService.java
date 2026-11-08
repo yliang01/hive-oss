@@ -107,9 +107,10 @@ public class DbBackupQueryService {
                 if (batchId == null || batchId.isBlank()) {
                     continue;
                 }
-                Instant createdAt = manifestObject.getLastModified() != null
-                        ? manifestObject.getLastModified().toInstant()
-                        : null;
+                Instant createdAt = DbBackupManifestService.backupTimeFromBatchId(batchId)
+                        .orElseGet(() -> manifestObject.getLastModified() == null
+                                ? null
+                                : manifestObject.getLastModified().toInstant());
                 items.add(DbBackupListVO.DbBackupItemVO.builder()
                         .batchId(batchId)
                         .database(DbBackupManifestService.databaseFromBatchId(batchId))

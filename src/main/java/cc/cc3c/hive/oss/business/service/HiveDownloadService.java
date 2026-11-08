@@ -232,13 +232,13 @@ public class HiveDownloadService {
         hiveRecordRepository.updateDownloadStatus(current.category().categoryId(), current.key(), null);
     }
 
-    public LocalDownloadMove moveLocalDownload(String categoryCode, HiveRecord record, String targetGroupCode) throws IOException {
-        String sourceGroupCode = record.getGroup() == null ? null : record.getGroup().getGroupCode();
-        Path source = resolveDownloadFile(categoryCode, sourceGroupCode, record.getZipped(), record.getFileName(), false);
+    public LocalDownloadMove moveLocalDownload(String categoryName, HiveRecord record, String targetGroupName) throws IOException {
+        String sourceGroupName = record.getGroup() == null ? null : record.getGroup().getGroupName();
+        Path source = resolveDownloadFile(categoryName, sourceGroupName, record.getZipped(), record.getFileName(), false);
         if (!Files.isRegularFile(source)) {
             return null;
         }
-        Path target = resolveDownloadFile(categoryCode, targetGroupCode, record.getZipped(), record.getFileName(), true);
+        Path target = resolveDownloadFile(categoryName, targetGroupName, record.getZipped(), record.getFileName(), true);
         Files.move(source, target);
         return new LocalDownloadMove(source, target);
     }
@@ -293,14 +293,14 @@ public class HiveDownloadService {
     }
 
     private Path resolveDownloadFile(CategoryFileContext context, boolean createDirectories) throws IOException {
-        return resolveDownloadFile(context.category().code(), context.groupCode(), context.zipped(), context.fileName(), createDirectories);
+        return resolveDownloadFile(context.category().name(), context.groupName(), context.zipped(), context.fileName(), createDirectories);
     }
 
-    private Path resolveDownloadFile(String categoryCode, String groupCode, Boolean zipped, String fileName,
+    private Path resolveDownloadFile(String categoryName, String groupName, Boolean zipped, String fileName,
                                      boolean createDirectories) throws IOException {
-        String resolvedGroupCode = StringUtils.defaultIfBlank(groupCode, UNGROUPED_DIR);
+        String resolvedGroupName = StringUtils.defaultIfBlank(groupName, UNGROUPED_DIR);
         String resolvedFileName = Boolean.TRUE.equals(zipped) ? fileName + ".zip" : fileName;
-        Path groupDirectory = downloadRoot.resolve(categoryCode).resolve(resolvedGroupCode);
+        Path groupDirectory = downloadRoot.resolve(categoryName).resolve(resolvedGroupName);
         if (createDirectories) {
             Files.createDirectories(groupDirectory);
         }

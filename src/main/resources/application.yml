@@ -24,20 +24,20 @@ hive:
     concurrency: 4
     tencent:
       enabled: false
-  downloadDir: ./data/downloads
-  imageCacheDir: ./data/image-cache
+  downloadDir: "${user.home}/Desktop/hive/download"
+  imageCacheDir: "${user.home}/Desktop/hive/image-cache"
   imageCacheTtlDays: 7
   h2:
     server:
       enabled: true
       port: 9092
-      baseDir: ./data/db
+      baseDir: "${user.home}/Desktop/hive/db"
       allowOthers: false
   preview:
     max-size-bytes: 10485760
 
 backup:
-  dir: ./data/db2oss
+  dir: "${user.home}/Desktop/hive/backup"
   database:
     type: h2
   h2:

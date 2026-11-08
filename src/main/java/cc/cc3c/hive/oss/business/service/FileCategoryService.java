@@ -37,6 +37,7 @@ public class FileCategoryService {
         if (StringUtils.isBlank(request.getName())) {
             throw new IllegalArgumentException("name is required");
         }
+        String name = request.getName().trim();
         if (StringUtils.isBlank(request.getBucketName())) {
             throw new IllegalArgumentException("bucketName is required");
         }
@@ -55,13 +56,17 @@ public class FileCategoryService {
         if (fileCategoryRepository.existsByCode(request.getCode().toUpperCase(Locale.ROOT))) {
             throw new IllegalArgumentException("category code exists");
         }
+        if (fileCategoryRepository.findAllByOrderBySortOrderAscIdAsc().stream()
+                .anyMatch(category -> category.getName() != null && category.getName().equalsIgnoreCase(name))) {
+            throw new IllegalArgumentException("category name exists");
+        }
         String bucketName = request.getBucketName();
         if (fileCategoryRepository.existsByBucketName(bucketName)) {
             throw new IllegalArgumentException("bucket name exists");
         }
         FileCategoryEntity entity = new FileCategoryEntity();
         entity.setCode(request.getCode().toUpperCase(Locale.ROOT));
-        entity.setName(request.getName());
+        entity.setName(name);
         entity.setBucketName(bucketName);
         entity.setStorageClass(CategoryStorageClass.valueOf(request.getStorageClass().toUpperCase(Locale.ROOT)));
         entity.setUiVariant(request.getUiVariant());
@@ -82,6 +87,12 @@ public class FileCategoryService {
         if (StringUtils.isBlank(request.getName())) {
             throw new IllegalArgumentException("name is required");
         }
+        String name = request.getName().trim();
+        if (fileCategoryRepository.findAllByOrderBySortOrderAscIdAsc().stream()
+                .anyMatch(category -> !category.getId().equals(entity.getId())
+                        && category.getName() != null && category.getName().equalsIgnoreCase(name))) {
+            throw new IllegalArgumentException("category name exists");
+        }
         if (StringUtils.isBlank(request.getUiVariant())) {
             throw new IllegalArgumentException("uiVariant is required");
         }
@@ -91,7 +102,7 @@ public class FileCategoryService {
         if (request.getSortOrder() == null) {
             throw new IllegalArgumentException("sortOrder is required");
         }
-        entity.setName(request.getName());
+        entity.setName(name);
         entity.setUiVariant(request.getUiVariant());
         entity.setEnabled(request.getEnabled());
         entity.setSortOrder(request.getSortOrder());
@@ -124,6 +135,12 @@ public class FileCategoryService {
     public FileCategoryEntity resolveCategory(String categoryCode) {
         return fileCategoryRepository.findByCodeAndEnabledTrue(normalizeCode(categoryCode))
                 .orElseThrow(() -> new IllegalArgumentException("category not found: " + categoryCode));
+    }
+
+    public String nameByCode(String categoryCode) {
+        return fileCategoryRepository.findByCode(normalizeCode(categoryCode))
+                .map(FileCategoryEntity::getName)
+                .orElse(categoryCode);
     }
 
     private String normalizeCode(String code) {
