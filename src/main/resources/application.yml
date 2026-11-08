@@ -41,6 +41,6 @@ backup:
   database:
     type: h2
   h2:
-    jdbcUrl: jdbc:h2:tcp://127.0.0.1:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE
+    jdbcUrl: "jdbc:h2:tcp://127.0.0.1:9092/./hive;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_ON_EXIT=FALSE"
     username: sa
     password: ""

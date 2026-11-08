@@ -41,6 +41,8 @@
 
 文件列表固定按分组组织：未分组优先，随后按分组的 `sortOrder asc` 和 `id asc` 排列。前端不能改变分组顺序。列表支持按出现顺序重复传递 `sort` 参数，为每个分组内的文件排序，例如 `?sort=updateTime:desc&sort=fileName:asc`。允许字段为 `updateTime`、`fileName`、`size`，方向为 `asc` 或 `desc`，最多三条且字段不得重复。服务端始终在用户规则后追加记录 `id desc`，保证组内分页顺序稳定。非法规则返回 `400 Bad Request`。
 
+文件列表及批量详情中的 `updateTime`、`unfreezeTime` 以 ISO-8601 字符串返回（例如 `2026-08-09T23:26:10`），不可序列化为数字数组；字段级格式约束不受 Jackson 全局时间戳配置影响。
+
 ## 解冻与下载契约
 
 解冻只适用于 `storageClass=ARCHIVE`，其他分类的解冻与状态查询返回 `400 Bad Request`。`restorable` 表示归档对象是否仍被冻结：当 `unfreezeTime` 为空或已过期时为 `true`。前端仅在归档分类显示解冻操作，`unfreezeStatus=IN_PROGRESS` 用于页面刷新后恢复轮询。

@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.business.controller.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 import lombok.Data;
 
@@ -16,7 +17,9 @@ public class HiveRecordVO {
     private Long size;
     private Long originalSize;
     private String status;
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private LocalDateTime updateTime;
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private LocalDateTime unfreezeTime;
     private String unfreezeStatus;
     private Boolean restorable;

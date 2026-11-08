@@ -1,12 +1,14 @@
 package cc.cc3c.hive.oss.business.release;
 
 import cc.cc3c.hive.release.common.SecretException;
-import cc.cc3c.hive.release.common.DownloadTicket;
+import cc.cc3c.hive.release.publisher.PublishedRelease;
 import cc.cc3c.hive.release.publisher.ReleaseException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
+import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -28,6 +30,11 @@ public class SelfReleaseController {
         return service.view();
     }
 
+    @GetMapping("/versions")
+    public List<PublishedRelease> versions() throws IOException {
+        return service.releases();
+    }
+
     @PostMapping("/publish")
     public SelfReleaseService.View publish(@RequestBody Publish body) {
         if (body.version == null) throw new SecretException("请填写版本号。");
@@ -40,11 +47,21 @@ public class SelfReleaseController {
         }
     }
 
-    public record Ticket(String version, int seconds) { }
-    @PostMapping(value = "/ticket", produces = "application/json")
-    public ResponseEntity<DownloadTicket> ticket(@RequestBody Ticket body) throws Exception {
-        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=download.ticket.json")
-                .body(service.ticket(body.version(), body.seconds()));
+    public record SignManifest(String version, int seconds) { }
+    @PostMapping(value = "/manifest", produces = "application/zip")
+    public ResponseEntity<byte[]> manifest(@RequestBody SignManifest body) throws IOException {
+        byte[] packageBytes = service.manifestPackage(body.version(), body.seconds());
+        String filename = "hive-manifest-" + body.version() + ".zip";
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=" + filename)
+                .body(packageBytes);
+    }
+
+    public record DeleteVersions(List<String> versions) { }
+
+    @DeleteMapping("/versions")
+    public ResponseEntity<Void> deleteVersions(@RequestBody DeleteVersions body) throws IOException {
+        service.deleteReleases(body.versions());
+        return ResponseEntity.noContent().build();
     }
 
     @ExceptionHandler({SecretException.class, ReleaseException.class})

@@ -23,16 +23,17 @@
 
 ## 发布与配置分发
 
-- `hive-release` starter 负责打包指定目录、加密配置、上传产物和签发下载 ticket；`hive-oss` 提供界面与业务调用入口。安装包不包含秘密 YAML。
+- `hive-release` starter 负责打包指定目录、加密配置、上传产物和签发带临时下载 URL 的 manifest；`hive-oss` 提供界面与业务调用入口。安装包不包含秘密 YAML。
 - 发布必须在业务配置解锁并启动后进行。发布目录来自当前工作目录下 `.release/build`，本地发布产物写入 `.release/upload`，配置下载写入 `.release/download`。IDE 工作目录会影响这些路径。
 - 源码仓库根目录的 `package-release.cmd` 构建并调用 `assemble-release.cmd`；后者从 `hive-oss/target/hive-oss-1.0.jar` 和 `hive-oss/src/distribution/` 组装 `.release/build`。已有 JAR 时可单独运行组装脚本。组装会重建 build 目录；发布打包期间不要重组输入目录。
 - 当前安装目录包含 `hive-oss.jar`、`start.cmd` 和 `start.sh`。启动脚本切换到安装目录后运行 Java；运行数据和本机覆盖配置分别保留在 `data/` 与 `config/`。升级前停止程序并备份数据，只替换程序 JAR 和启动脚本。
 - 发布目录会原样递归打包。不要将凭据、秘密配置、业务数据或日志放入 `.release/build` 或 `src/distribution/`。
-- 发布配置放在 JAR 的 `hive.release` 配置中，本机覆盖使用 `config/application.yml`。发布机需要阿里云 CLI（含 ossutil）、有效 operator profile 和 AssumeRole 权限。管理 UI 启动不依赖发布凭据；只有发布或签发 ticket 时才需要这些凭据。
+- 发布配置放在 JAR 的 `hive.release` 配置中，本机覆盖使用 `config/application.yml`。发布机需要阿里云 CLI（含 ossutil）、有效 operator profile 和 AssumeRole 权限。管理 UI 启动不依赖发布凭据；只有发布或签发 manifest 时才需要这些凭据。
 - 发布对象写入 `releases/<version>/`，依次上传 `hive-release.zip`、`secret.yml.enc`、`manifest.json`；manifest 是完成标记。禁止覆盖；上传失败不回滚已上传对象或本地文件，需换新版本号重试。发布前 starter 会检查 OSS Bucket 版本控制状态。
+- 发布管理页从 OSS 列出完整 manifest 版本；批量删除仅移除选中版本目录中的三项标准产物，并要求 Bucket 未启用版本控制。发布角色需有 `oss:ListObjects` 和 `oss:DeleteObject` 权限。
 - 新配置包密码至少 12 个字符。加密沿用 `hive-encryption` 的 AES-CBC 格式，密码同时作为密码、salt 和 IV 输入；该格式没有认证标签，不能可靠检测密文篡改。不要宣称它兼容旧 `HIVEYML1` 或 `.hcfg` 文件。
 - 真实阿里云集成测试是 opt-in，必须由用户手动运行；不要自行发起真实 OSS 发布或修改已有秘密文件。
-- 新安装可从发布页面签发 ticket，用户在 `/setup` 输入 ticket 下载加密配置；ticket 与配置密码须分开提供。业务配置只在启动时加载，变更后需重启程序。
+- 新安装可从发布页面签发 manifest，用户在 `/setup` 导入后按其签名 URL 下载加密配置；manifest 与配置密码须分开提供。业务配置只在启动时加载，变更后需重启程序。
 
 ## 前端开发
 

@@ -1,5 +1,6 @@
 package cc.cc3c.hive.oss.business.controller.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 import lombok.Data;
 
@@ -10,6 +11,7 @@ import java.time.Instant;
 public class DbBackupAckVO {
     private String batchId;
     private String status;
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Instant ackTime;
     private String database;
     private String message;

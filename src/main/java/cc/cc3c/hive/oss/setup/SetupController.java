@@ -17,7 +17,7 @@ public class SetupController {
         this.service = service;
     }
 
-    public record Download(String ticket) {
+    public record ManifestImport(String manifest) {
     }
 
     public record Import(String content) {
@@ -33,8 +33,8 @@ public class SetupController {
     }
 
     @PostMapping("/download")
-    public SetupService.Status download(@RequestBody Download body) throws Exception {
-        return service.download(body.ticket());
+    public SetupService.Status download(@RequestBody ManifestImport body) throws Exception {
+        return service.downloadManifest(body.manifest());
     }
 
     @PostMapping("/yaml")

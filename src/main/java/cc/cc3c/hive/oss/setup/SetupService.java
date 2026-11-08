@@ -4,7 +4,7 @@ import cc.cc3c.hive.release.common.ReleasePaths;
 import cc.cc3c.hive.release.consumer.ReleaseDownloader;
 import cc.cc3c.hive.release.common.SecretBundle;
 import cc.cc3c.hive.release.common.SecretException;
-import cc.cc3c.hive.release.common.DownloadTicket;
+import cc.cc3c.hive.release.common.ReleaseManifest;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,14 +18,14 @@ import java.util.UUID;
 
 @Service
 public class SetupService {
-    private static final ObjectMapper TICKET_JSON = new ObjectMapper().disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
+    private static final ObjectMapper MANIFEST_JSON = new ObjectMapper().disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
     public record Status(boolean ready, String state, String candidate, String message, String runningBuild) {
     }
 
     private final BusinessContextManager contextManager;
     private final String runningBuild;
     private volatile Path candidate;
-    private volatile String state = "locked", message = "请下载安全配置包后解锁，或加载秘密 YAML。";
+    private volatile String state = "locked", message = "请导入发布 manifest 后解锁，或加载秘密 YAML。";
 
     public SetupService(BusinessContextManager contextManager,
                         ObjectProvider<BuildProperties> buildProperties) throws Exception {
@@ -43,18 +43,18 @@ public class SetupService {
                 runningBuild);
     }
 
-    public synchronized Status download(String ticket) throws Exception {
+    public synchronized Status downloadManifest(String manifestJson) throws Exception {
         state = "downloading";
         try {
-            DownloadTicket parsed;
+            ReleaseManifest parsed;
             try {
-                parsed = TICKET_JSON.readValue(ticket, DownloadTicket.class);
+                parsed = MANIFEST_JSON.readValue(manifestJson, ReleaseManifest.class);
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new SecretException("Invalid release metadata; details suppressed.");
             }
             candidate = new ReleaseDownloader().downloadConfiguration(parsed).configuration();
             state = "locked";
-            message = "配置包已下载，请输入解锁密码。";
+            message = "配置包已下载并校验，请输入解锁密码。";
             return status();
         } catch (Exception e) {
             state = "failed";

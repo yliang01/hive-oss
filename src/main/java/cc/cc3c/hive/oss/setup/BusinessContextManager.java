@@ -6,6 +6,7 @@ import cc.cc3c.hive.oss.business.db.h2.H2ServerProperties;
 import cc.cc3c.hive.oss.business.db.h2.H2TcpServerLauncher;
 import cc.cc3c.hive.oss.runtime.BusinessContextConfiguration;
 import cc.cc3c.hive.release.common.SecretException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Profiles;
@@ -16,6 +17,7 @@ import org.springframework.web.context.support.StandardServletEnvironment;
 import java.nio.file.Path;
 import java.util.Arrays;
 
+@Slf4j
 public class BusinessContextManager {
     private final ConfigurableApplicationContext applicationContext;
     private final BusinessServlet servlet;
@@ -65,6 +67,7 @@ public class BusinessContextManager {
             context.close();
             H2TcpServerLauncher.stop();
             Arrays.fill(snapshot, (byte) 0);
+            log.error("start failed", exception);
             throw new SecretException("业务初始化失败，请检查数据库、配置和网络；管理页面仍可使用。");
         }
     }

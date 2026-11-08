@@ -8,7 +8,7 @@
 - 管理分类与分组，并将文件记录同步到本地数据库。
 - 编排 MySQL 数据库备份与恢复：`hive-oss` 负责业务流程及 OSS 文件流转，`db2oss` starter 负责本地备份和恢复过程。
 - 通过管理界面加载或解锁秘密配置；业务服务仅在配置解锁后启动。
-- 可选地发布程序包和加密配置，并为新安装签发配置下载 ticket。
+- 可选地发布程序包和加密配置，并为新安装签发带临时下载链接的 manifest。
 
 ## 应用结构
 
@@ -28,7 +28,7 @@ flowchart LR
 
 ## 运行与发布
 
-开发和运行环境需要 Java 21。可从 IDEA 运行主入口进行本地开发；源码仓库根目录的 `package-release.cmd` 会构建并组装 Windows/Linux 安装目录。解压后，在 Windows 运行 `start.cmd`，在 Linux/macOS 运行 `sh start.sh`，再访问 `http://localhost:8080/#/setup`。本地开发可在配置页选择秘密 YAML；正常安装可粘贴发布 ticket 下载加密配置并输入密码解锁。ticket 与配置包密码应分开传递。
+开发和运行环境需要 Java 21。可从 IDEA 运行主入口进行本地开发；源码仓库根目录的 `package-release.cmd` 会构建并组装 Windows/Linux 安装目录。解压后，在 Windows 运行 `start.cmd`，在 Linux/macOS 运行 `sh start.sh`，再访问 `http://localhost:8080/#/setup`。本地开发可在配置页选择秘密 YAML；正常安装可导入发布 manifest 下载加密配置并输入密码解锁。manifest 与配置包密码应分开传递。
 
 管理和业务接口共用一个 HTTP 端口：管理接口在 `/setup`，业务接口以 `/api` 开头。业务配置成功解锁后才会启动；更新配置需重启程序。发布程序需要在业务已启动后通过 `/#/admin/release` 操作，并配置 `hive.release` 发布目标及本机阿里云 CLI operator profile。发布程序目录、上传产物和配置下载位于当前工作目录下的 `.release/`。
 
